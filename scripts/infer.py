@@ -25,14 +25,21 @@ def parse_arguments(input_args=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("--device", type=str, default="cuda")
     parser.add_argument(
-        "--prompt", type=str, default="Georges Seurat painting of a lemur on Saturn"
+        "--text-prompt",
+        type=str,
+        default="Georges Seurat painting of a lemur on Saturn",
+    )
+    parser.add_argument(
+        "--image-prompt",
+        type=str,
+        default=None,
     )
     parser.add_argument("--width", type=int, default=512)
     parser.add_argument("--height", type=int, default=512)
     parser.add_argument("--seed", type=int, default=65536)
     parser.add_argument("--cfg-scale", type=float, default=7.5)
     parser.add_argument("--sampler", type=str, default="k_lms")
-    parser.add_argument("--num-denoising-steps", type=int, default=50)
+    parser.add_argument("--sampler-num-infer-steps", type=int, default=50)
     parser.add_argument("--output-dir", type=str, default="samples")
 
     args = parser.parse_args(input_args)
@@ -102,7 +109,7 @@ def main(args):
         expand=True,
     )
 
-    prompts = [args.prompt]
+    prompts = [args.text_prompt]
 
     uncond_prompt = ""
     uncond_prompts = [uncond_prompt] if uncond_prompt else None
@@ -110,7 +117,7 @@ def main(args):
     upload_input_image = False
     input_images = None  # [Image.open(path)]
 
-    strength = 0.8
+    strength = 0.6
 
     if args.cfg_scale == 1:
         use_cfg = False
@@ -169,12 +176,12 @@ def main(args):
         del tokenizer, clip
 
         if args.sampler == "k_lms":
-            sampler = KLMSSampler(n_inference_steps=args.num_denoising_steps)
+            sampler = KLMSSampler(n_inference_steps=args.sampler_num_infer_steps)
         elif sampler == "k_euler":
-            sampler = KEulerSampler(n_inference_steps=args.num_denoising_steps)
+            sampler = KEulerSampler(n_inference_steps=args.sampler_num_infer_steps)
         elif sampler == "k_euler_ancestral":
             sampler = KEulerAncestralSampler(
-                n_inference_steps=args.num_denoising_steps, generator=generator
+                n_inference_steps=args.sampler_num_infer_steps, generator=generator
             )
         else:
             raise ValueError(
@@ -184,33 +191,33 @@ def main(args):
 
         noise_shape = (len(prompts), 4, args.height // 8, args.width // 8)
 
-        if input_images:
+        if args.image_prompt:
             encoder = models["encoder"]
             processed_input_images = []
-            for input_image in input_images:
-                if type(input_image) is str:
-                    input_image = Image.open(input_image)
+            input_image = args.image_prompt
+            if type(input_image) is str:
+                input_image = Image.open(input_image)
 
-                input_image = input_image.resize((args.width, args.height))
-                input_image = np.array(input_image)
-                input_image = torch.tensor(input_image, dtype=torch.float32)
-                input_image = util.rescale(input_image, (0, 255), (-1, 1))
-                processed_input_images.append(input_image)
+            input_image = input_image.resize((args.width, args.height))
+            input_image = np.array(input_image)
+            input_image = torch.tensor(input_image, dtype=torch.float32)
+            input_image = util.rescale(input_image, (0, 255), (-1, 1))
+            processed_input_images.append(input_image)
             input_images_tensor = torch.stack(processed_input_images).to(args.device)
             input_images_tensor = util.move_channel(input_images_tensor, to="first")
 
             _, _, height, width = input_images_tensor.shape
             noise_shape = (len(prompts), 4, height // 8, width // 8)
 
-            encoder_noise = torch.randn(
-                noise_shape, generator=generator, device=args.device
-            )
-            latents = encoder(input_images_tensor, encoder_noise)
+            latents = encoder(input_images_tensor)
+            print("latents out of encoder", latents.size())
 
             latents_noise = torch.randn(
                 noise_shape, generator=generator, device=args.device
             )
-            sampler.set_strength(strength=strength)
+            sampler.set_strength(
+                strength=strength
+            )  # proxy for timestep TODO: change to timestep
             latents += latents_noise * sampler.initial_scale
 
             del encoder, processed_input_images, input_images_tensor, latents_noise
@@ -222,7 +229,9 @@ def main(args):
 
         timesteps = progress.track(sampler.timesteps, description="Denoising...")
         for timestep in timesteps:
-            time_embedding = util.get_time_embedding(timestep).to(args.device)
+            time_embedding = util.get_time_embedding(
+                timestep, dtype=torch.float32, device=latents.device
+            )
 
             input_latents = latents * sampler.get_input_scale()
             if use_cfg:

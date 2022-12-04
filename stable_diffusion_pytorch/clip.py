@@ -5,15 +5,16 @@ from .attention import SelfAttention
 
 
 class CLIPEmbedding(nn.Module):
-    def __init__(self, n_vocab: int, n_embd: int, n_token: int):
+    def __init__(self, vocab_len: int, embedding_len: int, window_len: int):
         super().__init__()
-        self.token_embedding = nn.Embedding(n_vocab, n_embd)
-        self.position_value = nn.Parameter(torch.zeros((n_token, n_embd)))
-    
+        self.token_embedding = nn.Embedding(vocab_len, embedding_len)
+        self.position_value = nn.Parameter(torch.zeros((window_len, embedding_len)))
+
     def forward(self, tokens):
         x = self.token_embedding(tokens)
         x += self.position_value
         return x
+
 
 class CLIPLayer(nn.Module):
     def __init__(self, n_head: int, n_embd: int):
@@ -33,24 +34,31 @@ class CLIPLayer(nn.Module):
         residue = x
         x = self.layernorm_2(x)
         x = self.linear_1(x)
-        x = x * torch.sigmoid(1.702 * x)   # QuickGELU activation function
+        x = x * torch.sigmoid(1.702 * x)  # QuickGELU activation function
         x = self.linear_2(x)
         x += residue
 
         return x
 
+
 class CLIP(nn.Module):
-    def __init__(self):
+    def __init__(
+        self,
+        vocab_len: int = 49408,
+        embedding_len: int = 768,
+        window_len: int = 77,
+        num_layers: int = 12,
+    ):
         super().__init__()
-        self.embedding = CLIPEmbedding(49408, 768, 77)
-        self.layers = nn.ModuleList([
-            CLIPLayer(12, 768) for i in range(12)
-        ])
-        self.layernorm = nn.LayerNorm(768)
-    
+        self.embedding = CLIPEmbedding(vocab_len, embedding_len, window_len)
+        self.layers = nn.ModuleList(
+            [CLIPLayer(num_layers, embedding_len) for i in range(num_layers)]
+        )
+        self.layernorm = nn.LayerNorm(embedding_len)
+
     def forward(self, tokens: torch.LongTensor) -> torch.FloatTensor:
         tokens = tokens.type(torch.long)
-        
+
         state = self.embedding(tokens)
         for layer in self.layers:
             state = layer(state)

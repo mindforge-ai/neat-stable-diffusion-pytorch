@@ -1,9 +1,12 @@
 import numpy as np
 from .. import util
+import torch
 
 
-class KLMSSampler():
-    def __init__(self, n_inference_steps=50, n_training_steps=1000, lms_order=4):
+class KLMSSampler:
+    def __init__(
+        self, n_inference_steps=50, n_training_steps=1000, lms_order=4, device="cuda"
+    ):
         timesteps = np.linspace(n_training_steps - 1, 0, n_inference_steps)
 
         alphas_cumprod = util.get_alphas_cumprod(n_training_steps=n_training_steps)
@@ -12,7 +15,8 @@ class KLMSSampler():
         log_sigmas = np.interp(timesteps, range(n_training_steps), log_sigmas)
         sigmas = np.exp(log_sigmas)
         sigmas = np.append(sigmas, 0)
-        
+        sigmas = torch.tensor(sigmas, device=device, dtype=torch.float16)  # TODO: tidy
+
         self.sigmas = sigmas
         self.initial_scale = sigmas.max()
         self.timesteps = timesteps
@@ -22,15 +26,19 @@ class KLMSSampler():
         self.step_count = 0
         self.outputs = []
 
+        self.device = device
+
     def get_input_scale(self, step_count=None):
         if step_count is None:
             step_count = self.step_count
         sigma = self.sigmas[step_count]
-        return 1 / (sigma ** 2 + 1) ** 0.5
+        return 1 / (sigma**2 + 1) ** 0.5
 
     def set_strength(self, strength=1):
         start_step = self.n_inference_steps - int(self.n_inference_steps * strength)
-        self.timesteps = np.linspace(self.n_training_steps - 1, 0, self.n_inference_steps)
+        self.timesteps = np.linspace(
+            self.n_training_steps - 1, 0, self.n_inference_steps
+        )
         self.timesteps = self.timesteps[start_step:]
         self.initial_scale = self.sigmas[start_step]
         self.step_count = start_step
@@ -39,17 +47,32 @@ class KLMSSampler():
         t = self.step_count
         self.step_count += 1
 
-        self.outputs = [output] + self.outputs[:self.lms_order - 1]
+        self.outputs = [output] + self.outputs[: self.lms_order - 1]
         order = len(self.outputs)
         for i, output in enumerate(self.outputs):
             # Integrate polynomial by trapezoidal approx. method for 81 points.
-            x = np.linspace(self.sigmas[t], self.sigmas[t + 1], 81)
-            y = np.ones(81)
+            x = torch.linspace(
+                self.sigmas[t], self.sigmas[t + 1], 81, device=self.device
+            )
+            y = torch.ones(81, device=self.device)
             for j in range(order):
                 if i == j:
                     continue
                 y *= x - self.sigmas[t - j]
                 y /= self.sigmas[t - i] - self.sigmas[t - j]
-            lms_coeff = np.trapz(y=y, x=x)
+            lms_coeff = torch.trapz(y=y, x=x)
             latents += lms_coeff * output
         return latents
+
+    def add_noise(self, latents, noise, timestep):
+        step_indices = [
+            (torch.tensor(self.timesteps, device=timestep.device) == t).nonzero().item()
+            for t in timestep
+        ]
+
+        sigma = self.sigmas[step_indices].flatten()
+        while len(sigma.shape) < len(latents.shape):
+            sigma = sigma.unsqueeze(0)
+
+        noisy_samples = latents + noise * sigma
+        return noisy_samples
