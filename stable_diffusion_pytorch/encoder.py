@@ -5,7 +5,7 @@ from .decoder import AttentionBlock, ResidualBlock
 
 
 class Encoder(nn.Sequential):
-    def __init__(self, num_latent_channels=4):
+    def __init__(self, num_latent_channels=8):
         super().__init__(
             nn.Conv2d(3, 128, kernel_size=3, padding=1),
             ResidualBlock(128, 128),
@@ -30,11 +30,9 @@ class Encoder(nn.Sequential):
             ),  # quant_conv in HF diffusers
         )
 
-    def forward(self, x):
-        print(x.size())
+    def forward(self, x, noise):
         for module in self:
             x = module(x)
-            print(x.size())
 
         # Below is the ~equivalent of DiagonalGaussianDistribution in HF
 
@@ -42,6 +40,7 @@ class Encoder(nn.Sequential):
         log_variance = torch.clamp(log_variance, -30, 20)
         variance = log_variance.exp()
         stdev = variance.sqrt()
-        x = mean + stdev * x
+        x = mean + stdev * noise
+
         x *= 0.18215
         return x

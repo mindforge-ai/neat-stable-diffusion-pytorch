@@ -32,7 +32,7 @@ def parse_arguments(input_args=None):
     parser.add_argument("--height", type=int, default=512)
     parser.add_argument("--seed", type=int, default=65536)
     parser.add_argument("--sampler-num-train-steps", type=int, default=1000)
-    parser.add_argument("--learning-rate", type=float, default=1e-4)
+    parser.add_argument("--learning-rate", type=float, default=1e-7)
     parser.add_argument("--data-dir", type=str, default="data/inputs")
     parser.add_argument("--base-dir", type=str, default="data/ckpt")
     parser.add_argument("--output-dir", type=str, default="data/outputs")
@@ -124,6 +124,9 @@ def train(args):
     optimizer = torch.optim.AdamW(
         itertools.chain(unet.parameters(), vae.parameters(), text_encoder.parameters()),
         lr=args.learning_rate,
+        betas=(0.9, 0.999),
+        weight_decay=1e-2,
+        eps=1e-8,
     )
 
     noise_scheduler = KLMSSampler(n_inference_steps=args.sampler_num_train_steps)
@@ -137,66 +140,77 @@ def train(args):
         input_image = util.rescale(input_image, (0, 255), (-1, 1))
         processed_input_images.append(input_image)
 
-    for epoch in range(args.num_epochs):
-        text_encoder.train()
-        vae.train()
-        unet.train()
-        for step, batch in enumerate(
-            processed_input_images
-        ):  # iterate through Dataloader
-            # shift the below logic into the dataloader
-            input_images_tensor = torch.tensor(
-                batch, dtype=torch.float16, device=args.device
-            ).unsqueeze(0)
-            input_images_tensor = util.move_channel(input_images_tensor, to="first")
+    with torch.autograd.detect_anomaly():
+        for epoch in range(args.num_epochs):
+            text_encoder.train()
+            vae.train()
+            unet.train()
+            for step, batch in enumerate(
+                processed_input_images
+            ):  # iterate through Dataloader
+                # shift the below logic into the dataloader
+                input_images_tensor = torch.tensor(
+                    batch, dtype=torch.float16, device=args.device
+                ).unsqueeze(0)
+                input_images_tensor = util.move_channel(input_images_tensor, to="first")
 
-            batch_len, _, height, width = input_images_tensor.shape
-            noise_shape = (1, 4, height // 8, width // 8)
+                batch_len, _, height, width = input_images_tensor.shape
+                noise_shape = (1, 4, height // 8, width // 8)
 
-            latents = vae(input_images_tensor)
+                encoder_noise = torch.randn(
+                    noise_shape,
+                    generator=generator,
+                    dtype=torch.float16,
+                    device=args.device,
+                )
 
-            latents_noise = torch.randn(
-                noise_shape,
-                generator=generator,
-                dtype=torch.float16,
-                device=latents.device,
-            )
+                latents = vae(input_images_tensor, encoder_noise)
 
-            # Sample a random timestep for each image
-            timesteps = torch.randint(
-                0,
-                args.sampler_num_train_steps,
-                (batch_len,),
-                dtype=torch.float16,
-                device=latents.device,
-            )
-            timesteps = timesteps.long()
+                latents_noise = torch.randn(
+                    noise_shape,
+                    generator=generator,
+                    dtype=torch.float16,
+                    device=latents.device,
+                )
 
-            noisy_latents = noise_scheduler.add_noise(latents, latents_noise, timesteps)
+                # Sample a random timestep for each image
+                timesteps = torch.randint(
+                    0,
+                    args.sampler_num_train_steps,
+                    (batch_len,),
+                    dtype=torch.float16,
+                    device=latents.device,
+                )
+                timesteps = timesteps.long()
 
-            # this data should come from dataloader
-            tokens = tokenizer.encode_batch(["minecraft video"])
-            tokens = torch.tensor(tokens, dtype=torch.long, device=args.device)
-            encoder_hidden_states = text_encoder(tokens)
+                noisy_latents = noise_scheduler.add_noise(
+                    latents, latents_noise, timesteps
+                )
 
-            time_embedding = util.get_time_embedding(
-                timesteps, dtype=torch.float16, device=args.device
-            )
+                # this data should come from dataloader
+                tokens = tokenizer.encode_batch(["minecraft video"])
+                tokens = torch.tensor(tokens, dtype=torch.long, device=args.device)
+                encoder_hidden_states = text_encoder(tokens)
 
-            # Predict the noise residual
-            output = unet(noisy_latents, encoder_hidden_states, time_embedding)
+                time_embedding = util.get_time_embedding(
+                    timesteps, dtype=torch.float16, device=args.device
+                )
 
-            target = latents_noise
+                # Predict the noise residual
+                output = unet(noisy_latents, encoder_hidden_states, time_embedding)
 
-            loss = F.mse_loss(output.float(), target.float(), reduction="mean")
+                target = latents_noise
 
-            loss.backward()
-            optimizer.step()
-            # lr_scheduler.step()
-            optimizer.zero_grad()
+                loss = F.mse_loss(output.float(), target.float(), reduction="mean")
+                print("loss", loss.detach().item())
 
-            logs = {"loss": loss.detach().item()}
-            print(logs)
+                loss.backward()
+                optimizer.step()
+                # lr_scheduler.step()
+                optimizer.zero_grad()
+
+                logs = {"loss": loss.detach().item()}
+                print(logs)
 
 
 if __name__ == "__main__":

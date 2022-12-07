@@ -47,6 +47,229 @@ def parse_arguments(input_args=None):
     return args
 
 
+encoder_keys = [
+    "0.weight",
+    "0.bias",
+    "1.groupnorm_1.weight",
+    "1.groupnorm_1.bias",
+    "1.conv_1.weight",
+    "1.conv_1.bias",
+    "1.groupnorm_2.weight",
+    "1.groupnorm_2.bias",
+    "1.conv_2.weight",
+    "1.conv_2.bias",
+    "2.groupnorm_1.weight",
+    "2.groupnorm_1.bias",
+    "2.conv_1.weight",
+    "2.conv_1.bias",
+    "2.groupnorm_2.weight",
+    "2.groupnorm_2.bias",
+    "2.conv_2.weight",
+    "2.conv_2.bias",
+    "3.weight",
+    "3.bias",
+    "4.groupnorm_1.weight",
+    "4.groupnorm_1.bias",
+    "4.conv_1.weight",
+    "4.conv_1.bias",
+    "4.groupnorm_2.weight",
+    "4.groupnorm_2.bias",
+    "4.conv_2.weight",
+    "4.conv_2.bias",
+    "4.residual_layer.weight",
+    "4.residual_layer.bias",
+    "5.groupnorm_1.weight",
+    "5.groupnorm_1.bias",
+    "5.conv_1.weight",
+    "5.conv_1.bias",
+    "5.groupnorm_2.weight",
+    "5.groupnorm_2.bias",
+    "5.conv_2.weight",
+    "5.conv_2.bias",
+    "6.weight",
+    "6.bias",
+    "7.groupnorm_1.weight",
+    "7.groupnorm_1.bias",
+    "7.conv_1.weight",
+    "7.conv_1.bias",
+    "7.groupnorm_2.weight",
+    "7.groupnorm_2.bias",
+    "7.conv_2.weight",
+    "7.conv_2.bias",
+    "7.residual_layer.weight",
+    "7.residual_layer.bias",
+    "8.groupnorm_1.weight",
+    "8.groupnorm_1.bias",
+    "8.conv_1.weight",
+    "8.conv_1.bias",
+    "8.groupnorm_2.weight",
+    "8.groupnorm_2.bias",
+    "8.conv_2.weight",
+    "8.conv_2.bias",
+    "9.weight",
+    "9.bias",
+    "10.groupnorm_1.weight",
+    "10.groupnorm_1.bias",
+    "10.conv_1.weight",
+    "10.conv_1.bias",
+    "10.groupnorm_2.weight",
+    "10.groupnorm_2.bias",
+    "10.conv_2.weight",
+    "10.conv_2.bias",
+    "11.groupnorm_1.weight",
+    "11.groupnorm_1.bias",
+    "11.conv_1.weight",
+    "11.conv_1.bias",
+    "11.groupnorm_2.weight",
+    "11.groupnorm_2.bias",
+    "11.conv_2.weight",
+    "11.conv_2.bias",
+    "12.groupnorm_1.weight",
+    "12.groupnorm_1.bias",
+    "12.conv_1.weight",
+    "12.conv_1.bias",
+    "12.groupnorm_2.weight",
+    "12.groupnorm_2.bias",
+    "12.conv_2.weight",
+    "12.conv_2.bias",
+    "13.groupnorm.weight",
+    "13.groupnorm.bias",
+    "13.attention.in_proj.weight",
+    "13.attention.in_proj.bias",
+    "13.attention.out_proj.weight",
+    "13.attention.out_proj.bias",
+    "14.groupnorm_1.weight",
+    "14.groupnorm_1.bias",
+    "14.conv_1.weight",
+    "14.conv_1.bias",
+    "14.groupnorm_2.weight",
+    "14.groupnorm_2.bias",
+    "14.conv_2.weight",
+    "14.conv_2.bias",
+    "15.weight",
+    "15.bias",
+    "17.weight",
+    "17.bias",
+    "18.weight",
+    "18.bias",
+]
+
+hf_keys = [
+    "encoder.conv_in.weight",
+    "encoder.conv_in.bias",
+    "encoder.down_blocks.0.resnets.0.norm1.weight",
+    "encoder.down_blocks.0.resnets.0.norm1.bias",
+    "encoder.down_blocks.0.resnets.0.conv1.weight",
+    "encoder.down_blocks.0.resnets.0.conv1.bias",
+    "encoder.down_blocks.0.resnets.0.norm2.weight",
+    "encoder.down_blocks.0.resnets.0.norm2.bias",
+    "encoder.down_blocks.0.resnets.0.conv2.weight",
+    "encoder.down_blocks.0.resnets.0.conv2.bias",
+    "encoder.down_blocks.0.resnets.1.norm1.weight",
+    "encoder.down_blocks.0.resnets.1.norm1.bias",
+    "encoder.down_blocks.0.resnets.1.conv1.weight",
+    "encoder.down_blocks.0.resnets.1.conv1.bias",
+    "encoder.down_blocks.0.resnets.1.norm2.weight",
+    "encoder.down_blocks.0.resnets.1.norm2.bias",
+    "encoder.down_blocks.0.resnets.1.conv2.weight",
+    "encoder.down_blocks.0.resnets.1.conv2.bias",
+    "encoder.down_blocks.0.downsamplers.0.conv.weight",
+    "encoder.down_blocks.0.downsamplers.0.conv.bias",
+    "encoder.down_blocks.1.resnets.0.norm1.weight",
+    "encoder.down_blocks.1.resnets.0.norm1.bias",
+    "encoder.down_blocks.1.resnets.0.conv1.weight",
+    "encoder.down_blocks.1.resnets.0.conv1.bias",
+    "encoder.down_blocks.1.resnets.0.norm2.weight",
+    "encoder.down_blocks.1.resnets.0.norm2.bias",
+    "encoder.down_blocks.1.resnets.0.conv2.weight",
+    "encoder.down_blocks.1.resnets.0.conv2.bias",
+    "encoder.down_blocks.1.resnets.0.conv_shortcut.weight",
+    "encoder.down_blocks.1.resnets.0.conv_shortcut.bias",
+    "encoder.down_blocks.1.resnets.1.norm1.weight",
+    "encoder.down_blocks.1.resnets.1.norm1.bias",
+    "encoder.down_blocks.1.resnets.1.conv1.weight",
+    "encoder.down_blocks.1.resnets.1.conv1.bias",
+    "encoder.down_blocks.1.resnets.1.norm2.weight",
+    "encoder.down_blocks.1.resnets.1.norm2.bias",
+    "encoder.down_blocks.1.resnets.1.conv2.weight",
+    "encoder.down_blocks.1.resnets.1.conv2.bias",
+    "encoder.down_blocks.1.downsamplers.0.conv.weight",
+    "encoder.down_blocks.1.downsamplers.0.conv.bias",
+    "encoder.down_blocks.2.resnets.0.norm1.weight",
+    "encoder.down_blocks.2.resnets.0.norm1.bias",
+    "encoder.down_blocks.2.resnets.0.conv1.weight",
+    "encoder.down_blocks.2.resnets.0.conv1.bias",
+    "encoder.down_blocks.2.resnets.0.norm2.weight",
+    "encoder.down_blocks.2.resnets.0.norm2.bias",
+    "encoder.down_blocks.2.resnets.0.conv2.weight",
+    "encoder.down_blocks.2.resnets.0.conv2.bias",
+    "encoder.down_blocks.2.resnets.0.conv_shortcut.weight",
+    "encoder.down_blocks.2.resnets.0.conv_shortcut.bias",
+    "encoder.down_blocks.2.resnets.1.norm1.weight",
+    "encoder.down_blocks.2.resnets.1.norm1.bias",
+    "encoder.down_blocks.2.resnets.1.conv1.weight",
+    "encoder.down_blocks.2.resnets.1.conv1.bias",
+    "encoder.down_blocks.2.resnets.1.norm2.weight",
+    "encoder.down_blocks.2.resnets.1.norm2.bias",
+    "encoder.down_blocks.2.resnets.1.conv2.weight",
+    "encoder.down_blocks.2.resnets.1.conv2.bias",
+    "encoder.down_blocks.2.downsamplers.0.conv.weight",
+    "encoder.down_blocks.2.downsamplers.0.conv.bias",
+    "encoder.down_blocks.3.resnets.0.norm1.weight",
+    "encoder.down_blocks.3.resnets.0.norm1.bias",
+    "encoder.down_blocks.3.resnets.0.conv1.weight",
+    "encoder.down_blocks.3.resnets.0.conv1.bias",
+    "encoder.down_blocks.3.resnets.0.norm2.weight",
+    "encoder.down_blocks.3.resnets.0.norm2.bias",
+    "encoder.down_blocks.3.resnets.0.conv2.weight",
+    "encoder.down_blocks.3.resnets.0.conv2.bias",
+    "encoder.down_blocks.3.resnets.1.norm1.weight",
+    "encoder.down_blocks.3.resnets.1.norm1.bias",
+    "encoder.down_blocks.3.resnets.1.conv1.weight",
+    "encoder.down_blocks.3.resnets.1.conv1.bias",
+    "encoder.down_blocks.3.resnets.1.norm2.weight",
+    "encoder.down_blocks.3.resnets.1.norm2.bias",
+    "encoder.down_blocks.3.resnets.1.conv2.weight",
+    "encoder.down_blocks.3.resnets.1.conv2.bias",
+    "encoder.mid_block.attentions.0.group_norm.weight",
+    "encoder.mid_block.attentions.0.group_norm.bias",
+    "encoder.mid_block.attentions.0.query.weight",
+    "encoder.mid_block.attentions.0.query.bias",
+    "encoder.mid_block.attentions.0.key.weight",
+    "encoder.mid_block.attentions.0.key.bias",
+    "encoder.mid_block.attentions.0.value.weight",
+    "encoder.mid_block.attentions.0.value.bias",
+    "encoder.mid_block.attentions.0.proj_attn.weight",
+    "encoder.mid_block.attentions.0.proj_attn.bias",
+    "encoder.mid_block.resnets.0.norm1.weight",
+    "encoder.mid_block.resnets.0.norm1.bias",
+    "encoder.mid_block.resnets.0.conv1.weight",
+    "encoder.mid_block.resnets.0.conv1.bias",
+    "encoder.mid_block.resnets.0.norm2.weight",
+    "encoder.mid_block.resnets.0.norm2.bias",
+    "encoder.mid_block.resnets.0.conv2.weight",
+    "encoder.mid_block.resnets.0.conv2.bias",
+    "encoder.mid_block.resnets.1.norm1.weight",
+    "encoder.mid_block.resnets.1.norm1.bias",
+    "encoder.mid_block.resnets.1.conv1.weight",
+    "encoder.mid_block.resnets.1.conv1.bias",
+    "encoder.mid_block.resnets.1.norm2.weight",
+    "encoder.mid_block.resnets.1.norm2.bias",
+    "encoder.mid_block.resnets.1.conv2.weight",
+    "encoder.mid_block.resnets.1.conv2.bias",
+    "encoder.conv_norm_out.weight",
+    "encoder.conv_norm_out.bias",
+    "encoder.conv_out.weight",
+    "encoder.conv_out.bias",
+    "decoder.conv_in.weight",
+    "decoder.conv_in.bias",
+    "quant_conv.weight",
+    "quant_conv.bias",
+    "post_quant_conv.weight",
+    "post_quant_conv.bias",
+]
+
+
 def make_compatible(state_dict):
     keys = list(state_dict.keys())
     changed = False
@@ -77,10 +300,38 @@ def make_compatible(state_dict):
     return state_dict
 
 
+def make_encoder_compatible(state_dict):
+    keys = list(state_dict.keys())
+    changed = False
+    for key in keys:
+        if "decoder" in key:
+            del state_dict[key]
+            changed = True
+        elif "down_blocks" in key:
+            new_key = key.replace(r"encoder.down_blocks./^\w+$/", "")
+            state_dict[new_key] = state_dict[key]
+            del state_dict[key]
+            changed = True
+
+    if changed:
+        print(
+            "Given checkpoint data were modified dynamically by make_compatible"
+            " function on model_loader.py. Maybe this happened because you're"
+            " running newer codes with older checkpoint files. This behavior"
+            " (modify old checkpoints and notify rather than throw an error)"
+            " will be removed soon, so please download latest checkpoints file."
+        )
+
+    return state_dict
+
+
 def load_model(module, weights_path, device):
     model = module().to(device)
     state_dict = torch.load(weights_path)
     state_dict = make_compatible(state_dict)
+    if "vae" in weights_path:
+        make_encoder_compatible(state_dict)
+    print(state_dict.keys())
     model.load_state_dict(state_dict)
     return model
 
@@ -88,7 +339,9 @@ def load_model(module, weights_path, device):
 def preload_models(device):
     return {
         "clip": load_model(CLIP, "data/ckpt/clip.pt", device),
-        "encoder": load_model(Encoder, "data/ckpt/encoder.pt", device),
+        "encoder": load_model(
+            Encoder, "data/v1-5-weights/vae/diffusion_pytorch_model.bin", device
+        ),
         "decoder": load_model(Decoder, "data/ckpt/decoder.pt", device),
         "diffusion": load_model(Diffusion, "data/ckpt/diffusion.pt", device),
     }
