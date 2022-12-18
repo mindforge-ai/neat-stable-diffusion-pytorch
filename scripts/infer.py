@@ -67,6 +67,8 @@ original_keys = {
     "first_stage_model.decoder.norm_out.bias": "norm_out.bias",
     "first_stage_model.decoder.conv_out.weight": "unknown_conv.weight",
     "first_stage_model.decoder.conv_out.bias": "unknown_conv.bias",
+    "first_stage_model.post_quant_conv.weight": "post_quant_conv.weight",
+    "first_stage_model.post_quant_conv.bias": "post_quant_conv.bias",
 }
 
 # CLIPTextEncoder weights
@@ -212,7 +214,7 @@ def make_compatible(state_dict):
                 changed = True
             del state_dict[key]
             changed = True
-        elif key in ["first_stage_model.quant_conv.weight", "first_stage_model.quant_conv.bias", "first_stage_model.post_quant_conv.weight", "first_stage_model.post_quant_conv.bias"]:
+        elif key in ["first_stage_model.quant_conv.weight", "first_stage_model.quant_conv.bias"]:
             del state_dict[key]
 
     if changed:

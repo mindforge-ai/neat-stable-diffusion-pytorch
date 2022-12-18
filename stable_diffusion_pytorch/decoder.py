@@ -74,27 +74,30 @@ class ResidualBlock(nn.Module):
 class Decoder(nn.Module):
     def __init__(self):
         super().__init__()
+        self.post_quant_conv = nn.Conv2d(4, 4, kernel_size=1)
         self.conv_in = nn.Conv2d(4, 512, kernel_size=3, padding=1)
         self.mid = nn.Sequential(
             ResidualBlock(512, 512),
             EncoderAttentionBlock(512),
             ResidualBlock(512, 512)
         )
+        # the original repo has some weird logic where it goes through each outer block in reverse, but each inner block in forward order, so not truly reversed
         self.up = nn.ModuleList([
+            # block 0
             ResidualBlock(256, 128),
             ResidualBlock(128, 128),
             ResidualBlock(128, 128),
-            # nn.Upsample(scale_factor=2),
+            # block 1
             ResidualBlock(512, 256),
             ResidualBlock(256, 256),
             ResidualBlock(256, 256),
-            # nn.Upsample(scale_factor=2),
             nn.Conv2d(256, 256, kernel_size=3, padding=1),
+            # block 2
             ResidualBlock(512, 512),
             ResidualBlock(512, 512),
             ResidualBlock(512, 512),
-            # nn.Upsample(scale_factor=2),
             nn.Conv2d(512, 512, kernel_size=3, padding=1),
+            # block 3
             ResidualBlock(512, 512),
             ResidualBlock(512, 512),
             ResidualBlock(512, 512),
@@ -105,15 +108,32 @@ class Decoder(nn.Module):
         self.unknown_conv = nn.Conv2d(128, 3, kernel_size=3, padding=1)
 
     def forward(self, x):
-        x /= 0.18215
+        x /= 0.18215 # not sure if this comes before or after, but putting it before as it's 'post quant'
+        x = self.post_quant_conv(x)
+
         x = self.conv_in(x)
-        print("a", x.size())
         x = self.mid(x)
-        print("b", x.size())
-        for layer in reversed(self.up):
-            x = layer(x)
-            print(x.size())
-        print("c", x.size())
+
+        # this is a gross implemenation of CompVis/stable-diffusion's "backwards" decoder, for some reason it's implemented in reverse.
+        x = self.up[-4](x)
+        x = self.up[-3](x)
+        x = self.up[-2](x)
+        x = nn.functional.interpolate(x, scale_factor=2, mode='nearest')
+        x = self.up[-1](x)
+        x = self.up[-8](x)
+        x = self.up[-7](x)
+        x = self.up[-6](x)
+        x = nn.functional.interpolate(x, scale_factor=2, mode='nearest')
+        x = self.up[-5](x)
+        x = self.up[-12](x)
+        x = self.up[-11](x)
+        x = self.up[-10](x)
+        x = nn.functional.interpolate(x, scale_factor=2, mode='nearest')
+        x = self.up[-9](x)
+        x = self.up[-15](x)
+        x = self.up[-14](x)
+        x = self.up[-13](x)
+
         x = self.norm_out(x)
         x = self.silu(x)
         x = self.unknown_conv(x)
