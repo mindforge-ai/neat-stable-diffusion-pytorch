@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 from torch.nn import functional as F
-from .attention import SelfAttention, CrossAttention
+from .attention import SelfAttention, CrossAttention, CLIPSelfAttention
 
 
 class TimeEmbedding(nn.Module):
@@ -57,7 +57,7 @@ class AttentionBlock(nn.Module):
         self.conv_input = nn.Conv2d(channels, channels, kernel_size=1, padding=0)
 
         self.layernorm_1 = nn.LayerNorm(channels)
-        self.attention_1 = SelfAttention(n_head, channels, in_proj_bias=False)
+        self.attention_1 = CLIPSelfAttention(n_head, channels, in_proj_bias=False)
         self.layernorm_2 = nn.LayerNorm(channels)
         self.attention_2 = CrossAttention(n_head, channels, d_context, in_proj_bias=False)
         self.layernorm_3 = nn.LayerNorm(channels)

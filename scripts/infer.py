@@ -1,5 +1,5 @@
 import torch
-from stable_diffusion_pytorch import Tokenizer, CLIP, Encoder, Decoder, Diffusion
+from stable_diffusion_pytorch import Tokenizer, CLIP, Encoder, Decoder, Diffusion, LegacyDecoder, LegacyEncoder
 from stable_diffusion_pytorch import util
 from stable_diffusion_pytorch.samplers import (
     KLMSSampler,
@@ -69,6 +69,15 @@ original_keys = {
     "first_stage_model.decoder.conv_out.bias": "unknown_conv.bias",
     "first_stage_model.post_quant_conv.weight": "post_quant_conv.weight",
     "first_stage_model.post_quant_conv.bias": "post_quant_conv.bias",
+    # UNET weights
+    "model.diffusion_model.time_embed.0.weight": "time_embedding.linear_1.weight",
+    "model.diffusion_model.time_embed.0.bias": "time_embedding.linear_1.bias",
+    "model.diffusion_model.time_embed.2.weight": "time_embedding.linear_2.weight",
+    "model.diffusion_model.time_embed.2.bias": "time_embedding.linear_2.bias",
+    "model.diffusion_model.out.0.weight": "final.groupnorm.weight",
+    "model.diffusion_model.out.0.bias": "final.groupnorm.bias",
+    "model.diffusion_model.out.2.weight": "final.conv.weight",
+    "model.diffusion_model.out.2.bias": "final.conv.bias",
 }
 
 # CLIPTextEncoder weights
@@ -189,6 +198,142 @@ for outer_i in range(4):
         original_keys[f"first_stage_model.decoder.up.{outer_i}.upsample.conv.bias"] = f"up.{up_counter}.bias"
         up_counter += 1
 
+
+# UNET weights
+
+for outer_i in range(12):
+    original_keys[f"model.diffusion_model.input_blocks.{outer_i}.0.weight"] = f"unet.encoders.{outer_i}.0.weight"
+    original_keys[f"model.diffusion_model.input_blocks.{outer_i}.0.bias"] = f"unet.encoders.{outer_i}.0.bias"
+    original_keys[f"model.diffusion_model.input_blocks.{outer_i}.0.in_layers.0.weight"] = f"unet.encoders.{outer_i}.0.groupnorm_feature.weight"
+    original_keys[f"model.diffusion_model.input_blocks.{outer_i}.0.in_layers.0.bias"] = f"unet.encoders.{outer_i}.0.groupnorm_feature.bias"
+    original_keys[f"model.diffusion_model.input_blocks.{outer_i}.0.in_layers.2.weight"] = f"unet.encoders.{outer_i}.0.conv_feature.weight"
+    original_keys[f"model.diffusion_model.input_blocks.{outer_i}.0.in_layers.2.bias"] = f"unet.encoders.{outer_i}.0.conv_feature.bias"
+    original_keys[f"model.diffusion_model.input_blocks.{outer_i}.0.emb_layers.1.weight"] = f"unet.encoders.{outer_i}.0.linear_time.weight"
+    original_keys[f"model.diffusion_model.input_blocks.{outer_i}.0.emb_layers.1.bias"] = f"unet.encoders.{outer_i}.0.linear_time.bias"
+    original_keys[f"model.diffusion_model.input_blocks.{outer_i}.0.out_layers.0.weight"] = f"unet.encoders.{outer_i}.0.groupnorm_merged.weight"
+    original_keys[f"model.diffusion_model.input_blocks.{outer_i}.0.out_layers.0.bias"] = f"unet.encoders.{outer_i}.0.groupnorm_merged.bias"
+    original_keys[f"model.diffusion_model.input_blocks.{outer_i}.0.out_layers.3.weight"] = f"unet.encoders.{outer_i}.0.conv_merged.weight"
+    original_keys[f"model.diffusion_model.input_blocks.{outer_i}.0.out_layers.3.bias"] = f"unet.encoders.{outer_i}.0.conv_merged.bias"
+    original_keys[f"model.diffusion_model.input_blocks.{outer_i}.1.norm.weight"] = f"unet.encoders.{outer_i}.1.groupnorm.weight"
+    original_keys[f"model.diffusion_model.input_blocks.{outer_i}.1.norm.bias"] = f"unet.encoders.{outer_i}.1.groupnorm.bias"
+    original_keys[f"model.diffusion_model.input_blocks.{outer_i}.1.proj_in.weight"] = f"unet.encoders.{outer_i}.1.conv_input.weight"
+    original_keys[f"model.diffusion_model.input_blocks.{outer_i}.1.proj_in.bias"] = f"unet.encoders.{outer_i}.1.conv_input.bias"
+    original_keys[f"model.diffusion_model.input_blocks.{outer_i}.1.transformer_blocks.0.norm1.weight"] = f"unet.encoders.{outer_i}.1.layernorm_1.weight"
+    original_keys[f"model.diffusion_model.input_blocks.{outer_i}.1.transformer_blocks.0.norm1.bias"] = f"unet.encoders.{outer_i}.1.layernorm_1.bias"
+    original_keys[f"model.diffusion_model.input_blocks.{outer_i}.1.transformer_blocks.0.attn1.to_q.weight"] = f"unet.encoders.{outer_i}.1.attention_1.q_proj.weight"
+    original_keys[f"model.diffusion_model.input_blocks.{outer_i}.1.transformer_blocks.0.attn1.to_k.weight"] = f"unet.encoders.{outer_i}.1.attention_1.k_proj.weight"
+    original_keys[f"model.diffusion_model.input_blocks.{outer_i}.1.transformer_blocks.0.attn1.to_v.weight"] = f"unet.encoders.{outer_i}.1.attention_1.v_proj.weight"
+    original_keys[f"model.diffusion_model.input_blocks.{outer_i}.1.transformer_blocks.0.attn1.to_out.0.weight"] = f"unet.encoders.{outer_i}.1.attention_1.out_proj.weight"
+    original_keys[f"model.diffusion_model.input_blocks.{outer_i}.1.transformer_blocks.0.attn1.to_out.0.bias"] = f"unet.encoders.{outer_i}.1.attention_1.out_proj.bias"
+    original_keys[f"model.diffusion_model.input_blocks.{outer_i}.1.transformer_blocks.0.norm2.weight"] = f"unet.encoders.{outer_i}.1.layernorm_2.weight"
+    original_keys[f"model.diffusion_model.input_blocks.{outer_i}.1.transformer_blocks.0.norm2.bias"] = f"unet.encoders.{outer_i}.1.layernorm_2.bias"
+    original_keys[f"model.diffusion_model.input_blocks.{outer_i}.1.transformer_blocks.0.attn2.to_q.weight"] = f"unet.encoders.{outer_i}.1.attention_2.q_proj.weight"
+    original_keys[f"model.diffusion_model.input_blocks.{outer_i}.1.transformer_blocks.0.attn2.to_k.weight"] = f"unet.encoders.{outer_i}.1.attention_2.k_proj.weight"
+    original_keys[f"model.diffusion_model.input_blocks.{outer_i}.1.transformer_blocks.0.attn2.to_v.weight"] = f"unet.encoders.{outer_i}.1.attention_2.v_proj.weight"
+    original_keys[f"model.diffusion_model.input_blocks.{outer_i}.1.transformer_blocks.0.attn2.to_out.0.weight"] = f"unet.encoders.{outer_i}.1.attention_2.out_proj.weight"
+    original_keys[f"model.diffusion_model.input_blocks.{outer_i}.1.transformer_blocks.0.attn2.to_out.0.bias"] = f"unet.encoders.{outer_i}.1.attention_2.out_proj.bias"
+    original_keys[f"model.diffusion_model.input_blocks.{outer_i}.1.transformer_blocks.0.norm3.weight"] = f"unet.encoders.{outer_i}.1.layernorm_3.weight"
+    original_keys[f"model.diffusion_model.input_blocks.{outer_i}.1.transformer_blocks.0.norm3.bias"] = f"unet.encoders.{outer_i}.1.layernorm_3.bias"
+    original_keys[f"model.diffusion_model.input_blocks.{outer_i}.1.transformer_blocks.0.ff.net.0.proj.weight"] = f"unet.encoders.{outer_i}.1.linear_geglu_1.weight"
+    original_keys[f"model.diffusion_model.input_blocks.{outer_i}.1.transformer_blocks.0.ff.net.0.proj.bias"] = f"unet.encoders.{outer_i}.1.linear_geglu_1.bias"
+    original_keys[f"model.diffusion_model.input_blocks.{outer_i}.1.transformer_blocks.0.ff.net.2.weight"] = f"unet.encoders.{outer_i}.1.linear_geglu_2.weight"
+    original_keys[f"model.diffusion_model.input_blocks.{outer_i}.1.transformer_blocks.0.ff.net.2.bias"] = f"unet.encoders.{outer_i}.1.linear_geglu_2.bias"
+    original_keys[f"model.diffusion_model.input_blocks.{outer_i}.1.proj_out.weight"] = f"unet.encoders.{outer_i}.1.conv_output.weight"
+    original_keys[f"model.diffusion_model.input_blocks.{outer_i}.1.proj_out.bias"] = f"unet.encoders.{outer_i}.1.conv_output.bias"
+    if outer_i in [3, 6, 9]:
+        original_keys[f"model.diffusion_model.input_blocks.{outer_i}.0.op.weight"] = f"unet.encoders.{outer_i}.0.weight"
+        original_keys[f"model.diffusion_model.input_blocks.{outer_i}.0.op.bias"] = f"unet.encoders.{outer_i}.0.bias"
+    if outer_i in [4, 7]:
+        original_keys[f"model.diffusion_model.input_blocks.{outer_i}.0.skip_connection.weight"] = f"unet.encoders.{outer_i}.0.residual_layer.weight"
+        original_keys[f"model.diffusion_model.input_blocks.{outer_i}.0.skip_connection.bias"] = f"unet.encoders.{outer_i}.0.residual_layer.bias"
+
+for outer_i in range(3):
+    # from above, so can probably be abstracted
+    original_keys[f"model.diffusion_model.middle_block.{outer_i}.in_layers.0.weight"] = f"unet.bottleneck.{outer_i}.groupnorm_feature.weight"
+    original_keys[f"model.diffusion_model.middle_block.{outer_i}.in_layers.0.bias"] = f"unet.bottleneck.{outer_i}.groupnorm_feature.bias"
+    original_keys[f"model.diffusion_model.middle_block.{outer_i}.in_layers.2.weight"] = f"unet.bottleneck.{outer_i}.conv_feature.weight"
+    original_keys[f"model.diffusion_model.middle_block.{outer_i}.in_layers.2.bias"] = f"unet.bottleneck.{outer_i}.conv_feature.bias"
+    original_keys[f"model.diffusion_model.middle_block.{outer_i}.emb_layers.1.weight"] = f"unet.bottleneck.{outer_i}.linear_time.weight"
+    original_keys[f"model.diffusion_model.middle_block.{outer_i}.emb_layers.1.bias"] = f"unet.bottleneck.{outer_i}.linear_time.bias"
+    original_keys[f"model.diffusion_model.middle_block.{outer_i}.out_layers.0.weight"] = f"unet.bottleneck.{outer_i}.groupnorm_merged.weight"
+    original_keys[f"model.diffusion_model.middle_block.{outer_i}.out_layers.0.bias"] = f"unet.bottleneck.{outer_i}.groupnorm_merged.bias"
+    original_keys[f"model.diffusion_model.middle_block.{outer_i}.out_layers.3.weight"] = f"unet.bottleneck.{outer_i}.conv_merged.weight"
+    original_keys[f"model.diffusion_model.middle_block.{outer_i}.out_layers.3.bias"] = f"unet.bottleneck.{outer_i}.conv_merged.bias"
+
+    original_keys[f"model.diffusion_model.middle_block.{outer_i}.norm.weight"] = f"unet.bottleneck.{outer_i}.groupnorm.weight"
+    original_keys[f"model.diffusion_model.middle_block.{outer_i}.norm.bias"] = f"unet.bottleneck.{outer_i}.groupnorm.bias"
+    original_keys[f"model.diffusion_model.middle_block.{outer_i}.proj_in.weight"] = f"unet.bottleneck.{outer_i}.conv_input.weight"
+    original_keys[f"model.diffusion_model.middle_block.{outer_i}.proj_in.bias"] = f"unet.bottleneck.{outer_i}.conv_input.bias"
+    original_keys[f"model.diffusion_model.middle_block.{outer_i}.transformer_blocks.0.norm1.weight"] = f"unet.bottleneck.{outer_i}.layernorm_1.weight"
+    original_keys[f"model.diffusion_model.middle_block.{outer_i}.transformer_blocks.0.norm1.bias"] = f"unet.bottleneck.{outer_i}.layernorm_1.bias"
+    original_keys[f"model.diffusion_model.middle_block.{outer_i}.transformer_blocks.0.attn1.to_q.weight"] = f"unet.bottleneck.{outer_i}.attention_1.q_proj.weight"
+    original_keys[f"model.diffusion_model.middle_block.{outer_i}.transformer_blocks.0.attn1.to_k.weight"] = f"unet.bottleneck.{outer_i}.attention_1.k_proj.weight"
+    original_keys[f"model.diffusion_model.middle_block.{outer_i}.transformer_blocks.0.attn1.to_v.weight"] = f"unet.bottleneck.{outer_i}.attention_1.v_proj.weight"
+    original_keys[f"model.diffusion_model.middle_block.{outer_i}.transformer_blocks.0.attn1.to_out.0.weight"] = f"unet.bottleneck.{outer_i}.attention_1.out_proj.weight"
+    original_keys[f"model.diffusion_model.middle_block.{outer_i}.transformer_blocks.0.attn1.to_out.0.bias"] = f"unet.bottleneck.{outer_i}.attention_1.out_proj.bias"
+    original_keys[f"model.diffusion_model.middle_block.{outer_i}.transformer_blocks.0.norm2.weight"] = f"unet.bottleneck.{outer_i}.layernorm_2.weight"
+    original_keys[f"model.diffusion_model.middle_block.{outer_i}.transformer_blocks.0.norm2.bias"] = f"unet.bottleneck.{outer_i}.layernorm_2.bias"
+    original_keys[f"model.diffusion_model.middle_block.{outer_i}.transformer_blocks.0.attn2.to_q.weight"] = f"unet.bottleneck.{outer_i}.attention_2.q_proj.weight"
+    original_keys[f"model.diffusion_model.middle_block.{outer_i}.transformer_blocks.0.attn2.to_k.weight"] = f"unet.bottleneck.{outer_i}.attention_2.k_proj.weight"
+    original_keys[f"model.diffusion_model.middle_block.{outer_i}.transformer_blocks.0.attn2.to_v.weight"] = f"unet.bottleneck.{outer_i}.attention_2.v_proj.weight"
+    original_keys[f"model.diffusion_model.middle_block.{outer_i}.transformer_blocks.0.attn2.to_out.0.weight"] = f"unet.bottleneck.{outer_i}.attention_2.out_proj.weight"
+    original_keys[f"model.diffusion_model.middle_block.{outer_i}.transformer_blocks.0.attn2.to_out.0.bias"] = f"unet.bottleneck.{outer_i}.attention_2.out_proj.bias"
+    original_keys[f"model.diffusion_model.middle_block.{outer_i}.transformer_blocks.0.norm3.weight"] = f"unet.bottleneck.{outer_i}.layernorm_3.weight"
+    original_keys[f"model.diffusion_model.middle_block.{outer_i}.transformer_blocks.0.norm3.bias"] = f"unet.bottleneck.{outer_i}.layernorm_3.bias"
+    original_keys[f"model.diffusion_model.middle_block.{outer_i}.transformer_blocks.0.ff.net.0.proj.weight"] = f"unet.bottleneck.{outer_i}.linear_geglu_1.weight"
+    original_keys[f"model.diffusion_model.middle_block.{outer_i}.transformer_blocks.0.ff.net.0.proj.bias"] = f"unet.bottleneck.{outer_i}.linear_geglu_1.bias"
+    original_keys[f"model.diffusion_model.middle_block.{outer_i}.transformer_blocks.0.ff.net.2.weight"] = f"unet.bottleneck.{outer_i}.linear_geglu_2.weight"
+    original_keys[f"model.diffusion_model.middle_block.{outer_i}.transformer_blocks.0.ff.net.2.bias"] = f"unet.bottleneck.{outer_i}.linear_geglu_2.bias"
+    original_keys[f"model.diffusion_model.middle_block.{outer_i}.proj_out.weight"] = f"unet.bottleneck.{outer_i}.conv_output.weight"
+    original_keys[f"model.diffusion_model.middle_block.{outer_i}.proj_out.bias"] = f"unet.bottleneck.{outer_i}.conv_output.bias"
+    # end from above
+
+for outer_i in range(12):
+    original_keys[f"model.diffusion_model.output_blocks.{outer_i}.0.in_layers.0.weight"] = f"unet.decoders.{outer_i}.0.groupnorm_feature.weight"
+    original_keys[f"model.diffusion_model.output_blocks.{outer_i}.0.in_layers.0.bias"] = f"unet.decoders.{outer_i}.0.groupnorm_feature.bias"
+    original_keys[f"model.diffusion_model.output_blocks.{outer_i}.0.in_layers.2.weight"] = f"unet.decoders.{outer_i}.0.conv_feature.weight"
+    original_keys[f"model.diffusion_model.output_blocks.{outer_i}.0.in_layers.2.bias"] = f"unet.decoders.{outer_i}.0.conv_feature.bias"
+    original_keys[f"model.diffusion_model.output_blocks.{outer_i}.0.emb_layers.1.weight"] = f"unet.decoders.{outer_i}.0.linear_time.weight"
+    original_keys[f"model.diffusion_model.output_blocks.{outer_i}.0.emb_layers.1.bias"] = f"unet.decoders.{outer_i}.0.linear_time.bias"
+    original_keys[f"model.diffusion_model.output_blocks.{outer_i}.0.out_layers.0.weight"] = f"unet.decoders.{outer_i}.0.groupnorm_merged.weight"
+    original_keys[f"model.diffusion_model.output_blocks.{outer_i}.0.out_layers.0.bias"] = f"unet.decoders.{outer_i}.0.groupnorm_merged.bias"
+    original_keys[f"model.diffusion_model.output_blocks.{outer_i}.0.out_layers.3.weight"] = f"unet.decoders.{outer_i}.0.conv_merged.weight"
+    original_keys[f"model.diffusion_model.output_blocks.{outer_i}.0.out_layers.3.bias"] = f"unet.decoders.{outer_i}.0.conv_merged.bias"
+    original_keys[f"model.diffusion_model.output_blocks.{outer_i}.1.norm.weight"] = f"unet.decoders.{outer_i}.1.groupnorm.weight"
+    original_keys[f"model.diffusion_model.output_blocks.{outer_i}.1.norm.bias"] = f"unet.decoders.{outer_i}.1.groupnorm.bias"
+    original_keys[f"model.diffusion_model.output_blocks.{outer_i}.1.proj_in.weight"] = f"unet.decoders.{outer_i}.1.conv_input.weight"
+    original_keys[f"model.diffusion_model.output_blocks.{outer_i}.1.proj_in.bias"] = f"unet.decoders.{outer_i}.1.conv_input.bias"
+    original_keys[f"model.diffusion_model.output_blocks.{outer_i}.1.transformer_blocks.0.norm1.weight"] = f"unet.decoders.{outer_i}.1.layernorm_1.weight"
+    original_keys[f"model.diffusion_model.output_blocks.{outer_i}.1.transformer_blocks.0.norm1.bias"] = f"unet.decoders.{outer_i}.1.layernorm_1.bias"
+    original_keys[f"model.diffusion_model.output_blocks.{outer_i}.1.transformer_blocks.0.attn1.to_q.weight"] = f"unet.decoders.{outer_i}.1.attention_1.q_proj.weight"
+    original_keys[f"model.diffusion_model.output_blocks.{outer_i}.1.transformer_blocks.0.attn1.to_k.weight"] = f"unet.decoders.{outer_i}.1.attention_1.k_proj.weight"
+    original_keys[f"model.diffusion_model.output_blocks.{outer_i}.1.transformer_blocks.0.attn1.to_v.weight"] = f"unet.decoders.{outer_i}.1.attention_1.v_proj.weight"
+    original_keys[f"model.diffusion_model.output_blocks.{outer_i}.1.transformer_blocks.0.attn1.to_out.0.weight"] = f"unet.decoders.{outer_i}.1.attention_1.out_proj.weight"
+    original_keys[f"model.diffusion_model.output_blocks.{outer_i}.1.transformer_blocks.0.attn1.to_out.0.bias"] = f"unet.decoders.{outer_i}.1.attention_1.out_proj.bias"
+    original_keys[f"model.diffusion_model.output_blocks.{outer_i}.1.transformer_blocks.0.norm2.weight"] = f"unet.decoders.{outer_i}.1.layernorm_2.weight"
+    original_keys[f"model.diffusion_model.output_blocks.{outer_i}.1.transformer_blocks.0.norm2.bias"] = f"unet.decoders.{outer_i}.1.layernorm_2.bias"
+    original_keys[f"model.diffusion_model.output_blocks.{outer_i}.1.transformer_blocks.0.attn2.to_q.weight"] = f"unet.decoders.{outer_i}.1.attention_2.q_proj.weight"
+    original_keys[f"model.diffusion_model.output_blocks.{outer_i}.1.transformer_blocks.0.attn2.to_k.weight"] = f"unet.decoders.{outer_i}.1.attention_2.k_proj.weight"
+    original_keys[f"model.diffusion_model.output_blocks.{outer_i}.1.transformer_blocks.0.attn2.to_v.weight"] = f"unet.decoders.{outer_i}.1.attention_2.v_proj.weight"
+    original_keys[f"model.diffusion_model.output_blocks.{outer_i}.1.transformer_blocks.0.attn2.to_out.0.weight"] = f"unet.decoders.{outer_i}.1.attention_2.out_proj.weight"
+    original_keys[f"model.diffusion_model.output_blocks.{outer_i}.1.transformer_blocks.0.attn2.to_out.0.bias"] = f"unet.decoders.{outer_i}.1.attention_2.out_proj.bias"
+    original_keys[f"model.diffusion_model.output_blocks.{outer_i}.1.transformer_blocks.0.norm3.weight"] = f"unet.decoders.{outer_i}.1.layernorm_3.weight"
+    original_keys[f"model.diffusion_model.output_blocks.{outer_i}.1.transformer_blocks.0.norm3.bias"] = f"unet.decoders.{outer_i}.1.layernorm_3.bias"
+    original_keys[f"model.diffusion_model.output_blocks.{outer_i}.1.transformer_blocks.0.ff.net.0.proj.weight"] = f"unet.decoders.{outer_i}.1.linear_geglu_1.weight"
+    original_keys[f"model.diffusion_model.output_blocks.{outer_i}.1.transformer_blocks.0.ff.net.0.proj.bias"] = f"unet.decoders.{outer_i}.1.linear_geglu_1.bias"
+    original_keys[f"model.diffusion_model.output_blocks.{outer_i}.1.transformer_blocks.0.ff.net.2.weight"] = f"unet.decoders.{outer_i}.1.linear_geglu_2.weight"
+    original_keys[f"model.diffusion_model.output_blocks.{outer_i}.1.transformer_blocks.0.ff.net.2.bias"] = f"unet.decoders.{outer_i}.1.linear_geglu_2.bias"
+    original_keys[f"model.diffusion_model.output_blocks.{outer_i}.1.proj_out.weight"] = f"unet.decoders.{outer_i}.1.conv_output.weight"
+    original_keys[f"model.diffusion_model.output_blocks.{outer_i}.1.proj_out.bias"] = f"unet.decoders.{outer_i}.1.conv_output.bias"
+    if outer_i in [2]:
+        original_keys[f"model.diffusion_model.output_blocks.{outer_i}.1.conv.weight"] = f"unet.decoders.{outer_i}.1.conv.weight"
+        original_keys[f"model.diffusion_model.output_blocks.{outer_i}.1.conv.bias"] = f"unet.decoders.{outer_i}.1.conv.bias"
+    if outer_i in [5, 8]:
+        original_keys[f"model.diffusion_model.output_blocks.{outer_i}.2.conv.weight"] = f"unet.decoders.{outer_i}.2.conv.weight"
+        original_keys[f"model.diffusion_model.output_blocks.{outer_i}.2.conv.bias"] = f"unet.decoders.{outer_i}.2.conv.bias"
+    original_keys[f"model.diffusion_model.output_blocks.{outer_i}.0.skip_connection.weight"] = f"unet.decoders.{outer_i}.0.residual_layer.weight"
+    original_keys[f"model.diffusion_model.output_blocks.{outer_i}.0.skip_connection.bias"] = f"unet.decoders.{outer_i}.0.residual_layer.bias"
+
 def make_compatible(state_dict):
     keys = list(state_dict.keys())
     changed = False
@@ -238,12 +383,12 @@ def load_model(module, weights_path, device):
 
 def preload_models(device):
     return {
-        "clip": load_model(CLIP, "weights/v1-5-cond_stage_model.pt", device),
+        "clip": load_model(CLIP, "weights/v1-4-cond_stage_model.pt", device),
         "encoder": load_model(
-            Encoder, "weights/v1-5-encoder.pt", device
+            Encoder, "weights/v1-4-encoder.pt", device
         ),
-        "decoder": load_model(Decoder, "weights/v1-5-decoder.pt", device),
-        "diffusion": load_model(Diffusion, "data/ckpt/diffusion.pt", device),
+        "decoder": load_model(Decoder, "weights/v1-4-decoder.pt", device),
+        "diffusion": load_model(Diffusion, "weights/v1-4-diffusion.pt", device),
     }
 
 
