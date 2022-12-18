@@ -1,38 +1,40 @@
 import torch
 from torch import nn
 from torch.nn import functional as F
-from .attention import SelfAttention
+from .attention import SelfAttention, CLIPSelfAttention
 
 
 class CLIPEmbedding(nn.Module):
     def __init__(self, vocab_len: int, embedding_len: int, window_len: int):
         super().__init__()
         self.token_embedding = nn.Embedding(vocab_len, embedding_len)
-        self.position_value = nn.Parameter(torch.zeros((window_len, embedding_len)))
+        self.position_embedding = nn.Embedding(window_len, embedding_len)
+        self.register_buffer("position_indices", torch.arange(window_len).unsqueeze(0))
 
     def forward(self, tokens):
-        x = self.token_embedding(tokens)
-        x += self.position_value
-        return x
+        embeddings = self.token_embedding(tokens)
+        positions = self.position_embedding(self.position_indices)
+        hidden_states = embeddings + positions
+        return hidden_states
 
 
 class CLIPLayer(nn.Module):
     def __init__(self, n_head: int, n_embd: int):
         super().__init__()
-        self.layernorm_1 = nn.LayerNorm(n_embd)
-        self.attention = SelfAttention(n_head, n_embd)
-        self.layernorm_2 = nn.LayerNorm(n_embd)
+        self.layer_norm_1 = nn.LayerNorm(n_embd)
+        self.self_attention = CLIPSelfAttention(n_head, n_embd)
+        self.layer_norm_2 = nn.LayerNorm(n_embd)
         self.linear_1 = nn.Linear(n_embd, 4 * n_embd)
         self.linear_2 = nn.Linear(4 * n_embd, n_embd)
 
     def forward(self, x):
         residue = x
-        x = self.layernorm_1(x)
-        x = self.attention(x, causal_mask=True)
+        x = self.layer_norm_1(x)
+        x = self.self_attention(x, causal_mask=True)
         x += residue
 
         residue = x
-        x = self.layernorm_2(x)
+        x = self.layer_norm_2(x)
         x = self.linear_1(x)
         x = x * torch.sigmoid(1.702 * x)  # QuickGELU activation function
         x = self.linear_2(x)
@@ -51,16 +53,16 @@ class CLIP(nn.Module):
     ):
         super().__init__()
         self.embedding = CLIPEmbedding(vocab_len, embedding_len, window_len)
-        self.layers = nn.ModuleList(
+        self.stack = nn.ModuleList(
             [CLIPLayer(num_layers, embedding_len) for i in range(num_layers)]
         )
-        self.layernorm = nn.LayerNorm(embedding_len)
+        self.final_layer_norm = nn.LayerNorm(embedding_len)
 
     def forward(self, tokens: torch.LongTensor) -> torch.FloatTensor:
         tokens = tokens.type(torch.long)
 
         state = self.embedding(tokens)
-        for layer in self.layers:
+        for layer in self.stack:
             state = layer(state)
-        output = self.layernorm(state)
+        output = self.final_layer_norm(state)
         return output

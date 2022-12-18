@@ -161,3 +161,7 @@ cython_debug/
 
 # neat-stable-diffusion-pytorch
 data
+weights
+samples
+*.ckpt
+*.ipynb

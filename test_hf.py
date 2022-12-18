@@ -1,10 +1,8 @@
-from diffusers import StableDiffusionPipeline, StableDiffusionImg2ImgPipeline
+from diffusers import StableDiffusionPipeline
 import torch
-from PIL import Image
 
 model = StableDiffusionPipeline.from_pretrained(
-    "runwayml/stable-diffusion-v1-5",
-    use_auth_token="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",
+    "runwayml/stable-diffusion-v1-5", revision="fp16", torch_dtype=torch.float16
 ).to(0)
 
-model.save_pretrained("data/v1-5-weights")
+print(model.vae.decoder)

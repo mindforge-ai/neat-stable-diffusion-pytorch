@@ -46,229 +46,146 @@ def parse_arguments(input_args=None):
 
     return args
 
+original_keys = {
+    # CLIPTextEncoder weights
+    "cond_stage_model.transformer.text_model.embeddings.position_ids": "embedding.position_indices",
+    "cond_stage_model.transformer.text_model.embeddings.token_embedding.weight": "embedding.token_embedding.weight",
+    "cond_stage_model.transformer.text_model.embeddings.position_embedding.weight": "embedding.position_embedding.weight",
+    "cond_stage_model.transformer.text_model.final_layer_norm.weight": "final_layer_norm.weight",
+    "cond_stage_model.transformer.text_model.final_layer_norm.bias": "final_layer_norm.bias",
+    # VAE Encoder weights
+    "first_stage_model.encoder.conv_in.weight": "conv_in.weight",
+    "first_stage_model.encoder.conv_in.bias": "conv_in.bias",
+    "first_stage_model.encoder.norm_out.weight": "norm_out.weight",
+    "first_stage_model.encoder.norm_out.bias": "norm_out.bias",
+    "first_stage_model.encoder.conv_out.weight": "unknown_conv.weight",
+    "first_stage_model.encoder.conv_out.bias": "unknown_conv.bias",
+    # VAE Decoder weights
+    "first_stage_model.decoder.conv_in.weight": "conv_in.weight",
+    "first_stage_model.decoder.conv_in.bias": "conv_in.bias",
+    "first_stage_model.decoder.norm_out.weight": "norm_out.weight",
+    "first_stage_model.decoder.norm_out.bias": "norm_out.bias",
+    "first_stage_model.decoder.conv_out.weight": "unknown_conv.weight",
+    "first_stage_model.decoder.conv_out.bias": "unknown_conv.bias",
+}
 
-encoder_keys = [
-    "0.weight",
-    "0.bias",
-    "1.groupnorm_1.weight",
-    "1.groupnorm_1.bias",
-    "1.conv_1.weight",
-    "1.conv_1.bias",
-    "1.groupnorm_2.weight",
-    "1.groupnorm_2.bias",
-    "1.conv_2.weight",
-    "1.conv_2.bias",
-    "2.groupnorm_1.weight",
-    "2.groupnorm_1.bias",
-    "2.conv_1.weight",
-    "2.conv_1.bias",
-    "2.groupnorm_2.weight",
-    "2.groupnorm_2.bias",
-    "2.conv_2.weight",
-    "2.conv_2.bias",
-    "3.weight",
-    "3.bias",
-    "4.groupnorm_1.weight",
-    "4.groupnorm_1.bias",
-    "4.conv_1.weight",
-    "4.conv_1.bias",
-    "4.groupnorm_2.weight",
-    "4.groupnorm_2.bias",
-    "4.conv_2.weight",
-    "4.conv_2.bias",
-    "4.residual_layer.weight",
-    "4.residual_layer.bias",
-    "5.groupnorm_1.weight",
-    "5.groupnorm_1.bias",
-    "5.conv_1.weight",
-    "5.conv_1.bias",
-    "5.groupnorm_2.weight",
-    "5.groupnorm_2.bias",
-    "5.conv_2.weight",
-    "5.conv_2.bias",
-    "6.weight",
-    "6.bias",
-    "7.groupnorm_1.weight",
-    "7.groupnorm_1.bias",
-    "7.conv_1.weight",
-    "7.conv_1.bias",
-    "7.groupnorm_2.weight",
-    "7.groupnorm_2.bias",
-    "7.conv_2.weight",
-    "7.conv_2.bias",
-    "7.residual_layer.weight",
-    "7.residual_layer.bias",
-    "8.groupnorm_1.weight",
-    "8.groupnorm_1.bias",
-    "8.conv_1.weight",
-    "8.conv_1.bias",
-    "8.groupnorm_2.weight",
-    "8.groupnorm_2.bias",
-    "8.conv_2.weight",
-    "8.conv_2.bias",
-    "9.weight",
-    "9.bias",
-    "10.groupnorm_1.weight",
-    "10.groupnorm_1.bias",
-    "10.conv_1.weight",
-    "10.conv_1.bias",
-    "10.groupnorm_2.weight",
-    "10.groupnorm_2.bias",
-    "10.conv_2.weight",
-    "10.conv_2.bias",
-    "11.groupnorm_1.weight",
-    "11.groupnorm_1.bias",
-    "11.conv_1.weight",
-    "11.conv_1.bias",
-    "11.groupnorm_2.weight",
-    "11.groupnorm_2.bias",
-    "11.conv_2.weight",
-    "11.conv_2.bias",
-    "12.groupnorm_1.weight",
-    "12.groupnorm_1.bias",
-    "12.conv_1.weight",
-    "12.conv_1.bias",
-    "12.groupnorm_2.weight",
-    "12.groupnorm_2.bias",
-    "12.conv_2.weight",
-    "12.conv_2.bias",
-    "13.groupnorm.weight",
-    "13.groupnorm.bias",
-    "13.attention.in_proj.weight",
-    "13.attention.in_proj.bias",
-    "13.attention.out_proj.weight",
-    "13.attention.out_proj.bias",
-    "14.groupnorm_1.weight",
-    "14.groupnorm_1.bias",
-    "14.conv_1.weight",
-    "14.conv_1.bias",
-    "14.groupnorm_2.weight",
-    "14.groupnorm_2.bias",
-    "14.conv_2.weight",
-    "14.conv_2.bias",
-    "15.weight",
-    "15.bias",
-    "17.weight",
-    "17.bias",
-    "18.weight",
-    "18.bias",
-]
+# CLIPTextEncoder weights
+for i in range(12):
+    original_keys[f"cond_stage_model.transformer.text_model.encoder.layers.{i}.self_attn.k_proj.weight"] = f"stack.{i}.self_attention.k_proj.weight"
+    original_keys[f"cond_stage_model.transformer.text_model.encoder.layers.{i}.self_attn.k_proj.bias"] = f"stack.{i}.self_attention.k_proj.bias"
+    original_keys[f"cond_stage_model.transformer.text_model.encoder.layers.{i}.self_attn.v_proj.weight"] = f"stack.{i}.self_attention.v_proj.weight"
+    original_keys[f"cond_stage_model.transformer.text_model.encoder.layers.{i}.self_attn.v_proj.bias"] = f"stack.{i}.self_attention.v_proj.bias"
+    original_keys[f"cond_stage_model.transformer.text_model.encoder.layers.{i}.self_attn.q_proj.weight"] = f"stack.{i}.self_attention.q_proj.weight"
+    original_keys[f"cond_stage_model.transformer.text_model.encoder.layers.{i}.self_attn.q_proj.bias"] = f"stack.{i}.self_attention.q_proj.bias"
+    original_keys[f"cond_stage_model.transformer.text_model.encoder.layers.{i}.self_attn.out_proj.weight"] = f"stack.{i}.self_attention.out_proj.weight"
+    original_keys[f"cond_stage_model.transformer.text_model.encoder.layers.{i}.self_attn.out_proj.bias"] = f"stack.{i}.self_attention.out_proj.bias"
+    original_keys[f"cond_stage_model.transformer.text_model.encoder.layers.{i}.layer_norm1.weight"] = f"stack.{i}.layer_norm_1.weight"
+    original_keys[f"cond_stage_model.transformer.text_model.encoder.layers.{i}.layer_norm1.bias"] = f"stack.{i}.layer_norm_1.bias"
+    original_keys[f"cond_stage_model.transformer.text_model.encoder.layers.{i}.mlp.fc1.weight"] = f"stack.{i}.linear_1.weight"
+    original_keys[f"cond_stage_model.transformer.text_model.encoder.layers.{i}.mlp.fc1.bias"] = f"stack.{i}.linear_1.bias"
+    original_keys[f"cond_stage_model.transformer.text_model.encoder.layers.{i}.mlp.fc2.weight"] = f"stack.{i}.linear_2.weight"
+    original_keys[f"cond_stage_model.transformer.text_model.encoder.layers.{i}.mlp.fc2.bias"] = f"stack.{i}.linear_2.bias"
+    original_keys[f"cond_stage_model.transformer.text_model.encoder.layers.{i}.layer_norm2.weight"] = f"stack.{i}.layer_norm_2.weight"
+    original_keys[f"cond_stage_model.transformer.text_model.encoder.layers.{i}.layer_norm2.bias"] = f"stack.{i}.layer_norm_2.bias"
 
-hf_keys = [
-    "encoder.conv_in.weight",
-    "encoder.conv_in.bias",
-    "encoder.down_blocks.0.resnets.0.norm1.weight",
-    "encoder.down_blocks.0.resnets.0.norm1.bias",
-    "encoder.down_blocks.0.resnets.0.conv1.weight",
-    "encoder.down_blocks.0.resnets.0.conv1.bias",
-    "encoder.down_blocks.0.resnets.0.norm2.weight",
-    "encoder.down_blocks.0.resnets.0.norm2.bias",
-    "encoder.down_blocks.0.resnets.0.conv2.weight",
-    "encoder.down_blocks.0.resnets.0.conv2.bias",
-    "encoder.down_blocks.0.resnets.1.norm1.weight",
-    "encoder.down_blocks.0.resnets.1.norm1.bias",
-    "encoder.down_blocks.0.resnets.1.conv1.weight",
-    "encoder.down_blocks.0.resnets.1.conv1.bias",
-    "encoder.down_blocks.0.resnets.1.norm2.weight",
-    "encoder.down_blocks.0.resnets.1.norm2.bias",
-    "encoder.down_blocks.0.resnets.1.conv2.weight",
-    "encoder.down_blocks.0.resnets.1.conv2.bias",
-    "encoder.down_blocks.0.downsamplers.0.conv.weight",
-    "encoder.down_blocks.0.downsamplers.0.conv.bias",
-    "encoder.down_blocks.1.resnets.0.norm1.weight",
-    "encoder.down_blocks.1.resnets.0.norm1.bias",
-    "encoder.down_blocks.1.resnets.0.conv1.weight",
-    "encoder.down_blocks.1.resnets.0.conv1.bias",
-    "encoder.down_blocks.1.resnets.0.norm2.weight",
-    "encoder.down_blocks.1.resnets.0.norm2.bias",
-    "encoder.down_blocks.1.resnets.0.conv2.weight",
-    "encoder.down_blocks.1.resnets.0.conv2.bias",
-    "encoder.down_blocks.1.resnets.0.conv_shortcut.weight",
-    "encoder.down_blocks.1.resnets.0.conv_shortcut.bias",
-    "encoder.down_blocks.1.resnets.1.norm1.weight",
-    "encoder.down_blocks.1.resnets.1.norm1.bias",
-    "encoder.down_blocks.1.resnets.1.conv1.weight",
-    "encoder.down_blocks.1.resnets.1.conv1.bias",
-    "encoder.down_blocks.1.resnets.1.norm2.weight",
-    "encoder.down_blocks.1.resnets.1.norm2.bias",
-    "encoder.down_blocks.1.resnets.1.conv2.weight",
-    "encoder.down_blocks.1.resnets.1.conv2.bias",
-    "encoder.down_blocks.1.downsamplers.0.conv.weight",
-    "encoder.down_blocks.1.downsamplers.0.conv.bias",
-    "encoder.down_blocks.2.resnets.0.norm1.weight",
-    "encoder.down_blocks.2.resnets.0.norm1.bias",
-    "encoder.down_blocks.2.resnets.0.conv1.weight",
-    "encoder.down_blocks.2.resnets.0.conv1.bias",
-    "encoder.down_blocks.2.resnets.0.norm2.weight",
-    "encoder.down_blocks.2.resnets.0.norm2.bias",
-    "encoder.down_blocks.2.resnets.0.conv2.weight",
-    "encoder.down_blocks.2.resnets.0.conv2.bias",
-    "encoder.down_blocks.2.resnets.0.conv_shortcut.weight",
-    "encoder.down_blocks.2.resnets.0.conv_shortcut.bias",
-    "encoder.down_blocks.2.resnets.1.norm1.weight",
-    "encoder.down_blocks.2.resnets.1.norm1.bias",
-    "encoder.down_blocks.2.resnets.1.conv1.weight",
-    "encoder.down_blocks.2.resnets.1.conv1.bias",
-    "encoder.down_blocks.2.resnets.1.norm2.weight",
-    "encoder.down_blocks.2.resnets.1.norm2.bias",
-    "encoder.down_blocks.2.resnets.1.conv2.weight",
-    "encoder.down_blocks.2.resnets.1.conv2.bias",
-    "encoder.down_blocks.2.downsamplers.0.conv.weight",
-    "encoder.down_blocks.2.downsamplers.0.conv.bias",
-    "encoder.down_blocks.3.resnets.0.norm1.weight",
-    "encoder.down_blocks.3.resnets.0.norm1.bias",
-    "encoder.down_blocks.3.resnets.0.conv1.weight",
-    "encoder.down_blocks.3.resnets.0.conv1.bias",
-    "encoder.down_blocks.3.resnets.0.norm2.weight",
-    "encoder.down_blocks.3.resnets.0.norm2.bias",
-    "encoder.down_blocks.3.resnets.0.conv2.weight",
-    "encoder.down_blocks.3.resnets.0.conv2.bias",
-    "encoder.down_blocks.3.resnets.1.norm1.weight",
-    "encoder.down_blocks.3.resnets.1.norm1.bias",
-    "encoder.down_blocks.3.resnets.1.conv1.weight",
-    "encoder.down_blocks.3.resnets.1.conv1.bias",
-    "encoder.down_blocks.3.resnets.1.norm2.weight",
-    "encoder.down_blocks.3.resnets.1.norm2.bias",
-    "encoder.down_blocks.3.resnets.1.conv2.weight",
-    "encoder.down_blocks.3.resnets.1.conv2.bias",
-    "encoder.mid_block.attentions.0.group_norm.weight",
-    "encoder.mid_block.attentions.0.group_norm.bias",
-    "encoder.mid_block.attentions.0.query.weight",
-    "encoder.mid_block.attentions.0.query.bias",
-    "encoder.mid_block.attentions.0.key.weight",
-    "encoder.mid_block.attentions.0.key.bias",
-    "encoder.mid_block.attentions.0.value.weight",
-    "encoder.mid_block.attentions.0.value.bias",
-    "encoder.mid_block.attentions.0.proj_attn.weight",
-    "encoder.mid_block.attentions.0.proj_attn.bias",
-    "encoder.mid_block.resnets.0.norm1.weight",
-    "encoder.mid_block.resnets.0.norm1.bias",
-    "encoder.mid_block.resnets.0.conv1.weight",
-    "encoder.mid_block.resnets.0.conv1.bias",
-    "encoder.mid_block.resnets.0.norm2.weight",
-    "encoder.mid_block.resnets.0.norm2.bias",
-    "encoder.mid_block.resnets.0.conv2.weight",
-    "encoder.mid_block.resnets.0.conv2.bias",
-    "encoder.mid_block.resnets.1.norm1.weight",
-    "encoder.mid_block.resnets.1.norm1.bias",
-    "encoder.mid_block.resnets.1.conv1.weight",
-    "encoder.mid_block.resnets.1.conv1.bias",
-    "encoder.mid_block.resnets.1.norm2.weight",
-    "encoder.mid_block.resnets.1.norm2.bias",
-    "encoder.mid_block.resnets.1.conv2.weight",
-    "encoder.mid_block.resnets.1.conv2.bias",
-    "encoder.conv_norm_out.weight",
-    "encoder.conv_norm_out.bias",
-    "encoder.conv_out.weight",
-    "encoder.conv_out.bias",
-    "decoder.conv_in.weight",
-    "decoder.conv_in.bias",
-    "quant_conv.weight",
-    "quant_conv.bias",
-    "post_quant_conv.weight",
-    "post_quant_conv.bias",
-]
+# VAE Encoder weights
+down_counter = 0
+for outer_i in range(4):
+    for inner_i in range(2):
+        original_keys[f"first_stage_model.encoder.down.{outer_i}.block.{inner_i}.norm1.weight"] = f"down.{down_counter}.groupnorm_1.weight"
+        original_keys[f"first_stage_model.encoder.down.{outer_i}.block.{inner_i}.norm1.bias"] = f"down.{down_counter}.groupnorm_1.bias"
+        original_keys[f"first_stage_model.encoder.down.{outer_i}.block.{inner_i}.conv1.weight"] = f"down.{down_counter}.conv_1.weight"
+        original_keys[f"first_stage_model.encoder.down.{outer_i}.block.{inner_i}.conv1.bias"] = f"down.{down_counter}.conv_1.bias"
+        original_keys[f"first_stage_model.encoder.down.{outer_i}.block.{inner_i}.norm2.weight"] = f"down.{down_counter}.groupnorm_2.weight"
+        original_keys[f"first_stage_model.encoder.down.{outer_i}.block.{inner_i}.norm2.bias"] = f"down.{down_counter}.groupnorm_2.bias"
+        original_keys[f"first_stage_model.encoder.down.{outer_i}.block.{inner_i}.conv2.weight"] = f"down.{down_counter}.conv_2.weight"
+        original_keys[f"first_stage_model.encoder.down.{outer_i}.block.{inner_i}.conv2.bias"] = f"down.{down_counter}.conv_2.bias"
+        if outer_i in [1, 2] and inner_i == 0:
+            original_keys[f"first_stage_model.encoder.down.{outer_i}.block.{inner_i}.nin_shortcut.weight"] = f"down.{down_counter}.residual_layer.weight" # first it's 3
+            original_keys[f"first_stage_model.encoder.down.{outer_i}.block.{inner_i}.nin_shortcut.bias"] = f"down.{down_counter}.residual_layer.bias"
+        down_counter += 1
+    # might need if here, i.e. if outer_i < 0  
+    original_keys[f"first_stage_model.encoder.down.{outer_i}.downsample.conv.weight"] = f"down.{down_counter}.weight" # first it's 2
+    original_keys[f"first_stage_model.encoder.down.{outer_i}.downsample.conv.bias"] = f"down.{down_counter}.bias"
+    down_counter += 1
 
+original_keys[f"first_stage_model.encoder.mid.block_1.norm1.weight"] = f"mid.0.groupnorm_1.weight"
+original_keys[f"first_stage_model.encoder.mid.block_1.norm1.bias"] = f"mid.0.groupnorm_1.bias"
+original_keys[f"first_stage_model.encoder.mid.block_1.conv1.weight"] = f"mid.0.conv_1.weight"
+original_keys[f"first_stage_model.encoder.mid.block_1.conv1.bias"] = f"mid.0.conv_1.bias"
+original_keys[f"first_stage_model.encoder.mid.block_1.norm2.weight"] = f"mid.0.groupnorm_2.weight"
+original_keys[f"first_stage_model.encoder.mid.block_1.norm2.bias"] = f"mid.0.groupnorm_2.bias"
+original_keys[f"first_stage_model.encoder.mid.block_1.conv2.weight"] = f"mid.0.conv_2.weight"
+original_keys[f"first_stage_model.encoder.mid.block_1.conv2.bias"] = f"mid.0.conv_2.bias"
+original_keys[f"first_stage_model.encoder.mid.block_2.norm1.weight"] = f"mid.2.groupnorm_1.weight"
+original_keys[f"first_stage_model.encoder.mid.block_2.norm1.bias"] = f"mid.2.groupnorm_1.bias"
+original_keys[f"first_stage_model.encoder.mid.block_2.conv1.weight"] = f"mid.2.conv_1.weight"
+original_keys[f"first_stage_model.encoder.mid.block_2.conv1.bias"] = f"mid.2.conv_1.bias"
+original_keys[f"first_stage_model.encoder.mid.block_2.norm2.weight"] = f"mid.2.groupnorm_2.weight"
+original_keys[f"first_stage_model.encoder.mid.block_2.norm2.bias"] = f"mid.2.groupnorm_2.bias"
+original_keys[f"first_stage_model.encoder.mid.block_2.conv2.weight"] = f"mid.2.conv_2.weight"
+original_keys[f"first_stage_model.encoder.mid.block_2.conv2.bias"] = f"mid.2.conv_2.bias"
+
+original_keys[f"first_stage_model.encoder.mid.attn_1.norm.weight"] = f"mid.1.groupnorm.weight"
+original_keys[f"first_stage_model.encoder.mid.attn_1.norm.bias"] = f"mid.1.groupnorm.bias"
+original_keys[f"first_stage_model.encoder.mid.attn_1.q.weight"] = f"mid.1.self_attention.q_proj.weight"
+original_keys[f"first_stage_model.encoder.mid.attn_1.q.bias"] = f"mid.1.self_attention.q_proj.bias"
+original_keys[f"first_stage_model.encoder.mid.attn_1.k.weight"] = f"mid.1.self_attention.k_proj.weight"
+original_keys[f"first_stage_model.encoder.mid.attn_1.k.bias"] = f"mid.1.self_attention.k_proj.bias"
+original_keys[f"first_stage_model.encoder.mid.attn_1.v.weight"] = f"mid.1.self_attention.v_proj.weight"
+original_keys[f"first_stage_model.encoder.mid.attn_1.v.bias"] = f"mid.1.self_attention.v_proj.bias"
+original_keys[f"first_stage_model.encoder.mid.attn_1.proj_out.weight"] = f"mid.1.self_attention.out_proj.weight"
+original_keys[f"first_stage_model.encoder.mid.attn_1.proj_out.bias"] = f"mid.1.self_attention.out_proj.bias"
+
+# VAE Decoder weights
+
+original_keys[f"first_stage_model.decoder.mid.block_1.norm1.weight"] = f"mid.0.groupnorm_1.weight"
+original_keys[f"first_stage_model.decoder.mid.block_1.norm1.bias"] = f"mid.0.groupnorm_1.bias"
+original_keys[f"first_stage_model.decoder.mid.block_1.conv1.weight"] = f"mid.0.conv_1.weight"
+original_keys[f"first_stage_model.decoder.mid.block_1.conv1.bias"] = f"mid.0.conv_1.bias"
+original_keys[f"first_stage_model.decoder.mid.block_1.norm2.weight"] = f"mid.0.groupnorm_2.weight"
+original_keys[f"first_stage_model.decoder.mid.block_1.norm2.bias"] = f"mid.0.groupnorm_2.bias"
+original_keys[f"first_stage_model.decoder.mid.block_1.conv2.weight"] = f"mid.0.conv_2.weight"
+original_keys[f"first_stage_model.decoder.mid.block_1.conv2.bias"] = f"mid.0.conv_2.bias"
+original_keys[f"first_stage_model.decoder.mid.block_2.norm1.weight"] = f"mid.2.groupnorm_1.weight"
+original_keys[f"first_stage_model.decoder.mid.block_2.norm1.bias"] = f"mid.2.groupnorm_1.bias"
+original_keys[f"first_stage_model.decoder.mid.block_2.conv1.weight"] = f"mid.2.conv_1.weight"
+original_keys[f"first_stage_model.decoder.mid.block_2.conv1.bias"] = f"mid.2.conv_1.bias"
+original_keys[f"first_stage_model.decoder.mid.block_2.norm2.weight"] = f"mid.2.groupnorm_2.weight"
+original_keys[f"first_stage_model.decoder.mid.block_2.norm2.bias"] = f"mid.2.groupnorm_2.bias"
+original_keys[f"first_stage_model.decoder.mid.block_2.conv2.weight"] = f"mid.2.conv_2.weight"
+original_keys[f"first_stage_model.decoder.mid.block_2.conv2.bias"] = f"mid.2.conv_2.bias"
+
+original_keys[f"first_stage_model.decoder.mid.attn_1.norm.weight"] = f"mid.1.groupnorm.weight"
+original_keys[f"first_stage_model.decoder.mid.attn_1.norm.bias"] = f"mid.1.groupnorm.bias"
+original_keys[f"first_stage_model.decoder.mid.attn_1.q.weight"] = f"mid.1.self_attention.q_proj.weight"
+original_keys[f"first_stage_model.decoder.mid.attn_1.q.bias"] = f"mid.1.self_attention.q_proj.bias"
+original_keys[f"first_stage_model.decoder.mid.attn_1.k.weight"] = f"mid.1.self_attention.k_proj.weight"
+original_keys[f"first_stage_model.decoder.mid.attn_1.k.bias"] = f"mid.1.self_attention.k_proj.bias"
+original_keys[f"first_stage_model.decoder.mid.attn_1.v.weight"] = f"mid.1.self_attention.v_proj.weight"
+original_keys[f"first_stage_model.decoder.mid.attn_1.v.bias"] = f"mid.1.self_attention.v_proj.bias"
+original_keys[f"first_stage_model.decoder.mid.attn_1.proj_out.weight"] = f"mid.1.self_attention.out_proj.weight"
+original_keys[f"first_stage_model.decoder.mid.attn_1.proj_out.bias"] = f"mid.1.self_attention.out_proj.bias"
+
+up_counter = 0
+for outer_i in range(4):
+    for inner_i in range(3):
+        original_keys[f"first_stage_model.decoder.up.{outer_i}.block.{inner_i}.norm1.weight"] = f"up.{up_counter}.groupnorm_1.weight"
+        original_keys[f"first_stage_model.decoder.up.{outer_i}.block.{inner_i}.norm1.bias"] = f"up.{up_counter}.groupnorm_1.bias"
+        original_keys[f"first_stage_model.decoder.up.{outer_i}.block.{inner_i}.conv1.weight"] = f"up.{up_counter}.conv_1.weight"
+        original_keys[f"first_stage_model.decoder.up.{outer_i}.block.{inner_i}.conv1.bias"] = f"up.{up_counter}.conv_1.bias"
+        original_keys[f"first_stage_model.decoder.up.{outer_i}.block.{inner_i}.norm2.weight"] = f"up.{up_counter}.groupnorm_2.weight"
+        original_keys[f"first_stage_model.decoder.up.{outer_i}.block.{inner_i}.norm2.bias"] = f"up.{up_counter}.groupnorm_2.bias"
+        original_keys[f"first_stage_model.decoder.up.{outer_i}.block.{inner_i}.conv2.weight"] = f"up.{up_counter}.conv_2.weight"
+        original_keys[f"first_stage_model.decoder.up.{outer_i}.block.{inner_i}.conv2.bias"] = f"up.{up_counter}.conv_2.bias"
+        if outer_i in [0, 1, 2] and inner_i == 0:
+            original_keys[f"first_stage_model.decoder.up.{outer_i}.block.{inner_i}.nin_shortcut.weight"] = f"up.{up_counter}.residual_layer.weight" # first it's 3
+            original_keys[f"first_stage_model.decoder.up.{outer_i}.block.{inner_i}.nin_shortcut.bias"] = f"up.{up_counter}.residual_layer.bias"
+        up_counter += 1
+    if outer_i > 0:
+        original_keys[f"first_stage_model.decoder.up.{outer_i}.upsample.conv.weight"] = f"up.{up_counter}.weight"
+        original_keys[f"first_stage_model.decoder.up.{outer_i}.upsample.conv.bias"] = f"up.{up_counter}.bias"
+        up_counter += 1
 
 def make_compatible(state_dict):
     keys = list(state_dict.keys())
@@ -287,31 +204,16 @@ def make_compatible(state_dict):
             state_dict[new_key] = state_dict[key]
             del state_dict[key]
             changed = True
-
-    if changed:
-        print(
-            "Given checkpoint data were modified dynamically by make_compatible"
-            " function on model_loader.py. Maybe this happened because you're"
-            " running newer codes with older checkpoint files. This behavior"
-            " (modify old checkpoints and notify rather than throw an error)"
-            " will be removed soon, so please download latest checkpoints file."
-        )
-
-    return state_dict
-
-
-def make_encoder_compatible(state_dict):
-    keys = list(state_dict.keys())
-    changed = False
-    for key in keys:
-        if "decoder" in key:
-            del state_dict[key]
-            changed = True
-        elif "down_blocks" in key:
-            new_key = key.replace(r"encoder.down_blocks./^\w+$/", "")
+        elif key in original_keys.keys():
+            new_key = original_keys[key]
             state_dict[new_key] = state_dict[key]
+            if new_key in ["mid.1.self_attention.q_proj.weight", "mid.1.self_attention.k_proj.weight", "mid.1.self_attention.v_proj.weight", "mid.1.self_attention.out_proj.weight"]:
+                state_dict[new_key] = state_dict[new_key].squeeze()
+                changed = True
             del state_dict[key]
             changed = True
+        elif key in ["first_stage_model.quant_conv.weight", "first_stage_model.quant_conv.bias", "first_stage_model.post_quant_conv.weight", "first_stage_model.post_quant_conv.bias"]:
+            del state_dict[key]
 
     if changed:
         print(
@@ -323,26 +225,22 @@ def make_encoder_compatible(state_dict):
         )
 
     return state_dict
-
 
 def load_model(module, weights_path, device):
     model = module().to(device)
     state_dict = torch.load(weights_path)
     state_dict = make_compatible(state_dict)
-    if "vae" in weights_path:
-        make_encoder_compatible(state_dict)
-    print(state_dict.keys())
     model.load_state_dict(state_dict)
     return model
 
 
 def preload_models(device):
     return {
-        "clip": load_model(CLIP, "data/ckpt/clip.pt", device),
+        "clip": load_model(CLIP, "weights/v1-5-cond_stage_model.pt", device),
         "encoder": load_model(
-            Encoder, "data/v1-5-weights/vae/diffusion_pytorch_model.bin", device
+            Encoder, "weights/v1-5-encoder.pt", device
         ),
-        "decoder": load_model(Decoder, "data/ckpt/decoder.pt", device),
+        "decoder": load_model(Decoder, "weights/v1-5-decoder.pt", device),
         "diffusion": load_model(Diffusion, "data/ckpt/diffusion.pt", device),
     }
 
