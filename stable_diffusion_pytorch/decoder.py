@@ -108,6 +108,7 @@ class Decoder(nn.Module):
         self.unknown_conv = nn.Conv2d(128, 3, kernel_size=3, padding=1)
 
     def forward(self, x):
+        # without scaling the latents in the following line, the image turned out faded and 'sandy-translucent' like a desert
         x /= 0.18215 # not sure if this comes before or after, but putting it before as it's 'post quant'
         x = self.post_quant_conv(x)
 

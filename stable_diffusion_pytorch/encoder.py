@@ -29,6 +29,7 @@ class Encoder(nn.Module):
         self.norm_out = nn.GroupNorm(32, 512)
         self.silu = nn.SiLU()
         self.unknown_conv = nn.Conv2d(512, num_latent_channels, kernel_size=3, padding=1)
+        self.quant_conv = nn.Conv2d(8, 8, kernel_size=1)
         """ self.conv_out = nn.Conv2d(
                 num_latent_channels, num_latent_channels, kernel_size=1, padding=0
             )  # quant_conv in HF diffusers """
@@ -42,6 +43,8 @@ class Encoder(nn.Module):
         x = self.unknown_conv(x)
         # x = self.conv_out(x)
 
+        x = self.quant_conv(x)
+
         # Below is the ~equivalent of DiagonalGaussianDistribution in HF
 
         mean, log_variance = torch.chunk(x, 2, dim=1)
@@ -50,6 +53,7 @@ class Encoder(nn.Module):
         stdev = variance.sqrt()
         x = mean + stdev * noise
 
+        # anecdotally, the below scaling seems ~insignificant, perhaps without it the image is a bit less smooth
         x *= 0.18215
         return x
 
