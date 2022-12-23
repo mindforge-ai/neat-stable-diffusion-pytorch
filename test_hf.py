@@ -7,5 +7,5 @@ model = StableDiffusionPipeline.from_pretrained(
 
 g_cuda = torch.Generator(device=0).manual_seed(65536)
 
-images = model("Georges Seurat painting of a lemur on Saturn", generator=g_cuda).images
+images = model("Georges Seurat painting of a lemur on Saturn", generator=g_cuda, guidance_scale=7.5, num_inference_steps=50).images
 images[0].save("hf_groundtruth.png")

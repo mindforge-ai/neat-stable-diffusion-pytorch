@@ -19,6 +19,8 @@ from PIL import Image
 from pathlib import Path
 import numpy as np
 
+torch.set_printoptions(precision=20)
+np.set_printoptions(precision=20)
 
 def parse_arguments(input_args=None):
 
@@ -457,8 +459,7 @@ def main(args):
         if args.height % 8 or args.width % 8:
             raise ValueError("height and width must be a multiple of 8")
 
-        generator = torch.Generator(device=args.device)
-        generator.manual_seed(args.seed)
+        generator = torch.Generator(device=args.device).manual_seed(args.seed)
 
         tokenizer = Tokenizer()
         clip = models["clip"]
@@ -515,7 +516,6 @@ def main(args):
             noise_shape = (len(prompts), 4, height // 8, width // 8)
 
             latents = encoder(input_images_tensor)
-            print("latents out of encoder", latents.size())
 
             latents_noise = torch.randn(
                 noise_shape, generator=generator, device=args.device
@@ -537,12 +537,12 @@ def main(args):
             time_embedding = util.get_time_embedding(
                 timestep, dtype=torch.float32, device=latents.device
             )
-
-            input_latents = latents * sampler.get_input_scale()
+            input_latents = sampler.scale_input_latent(latents)
             if use_cfg:
                 input_latents = input_latents.repeat(
                     2, 1, 1, 1
                 )  # Use same Gaussian noise for both latents
+
 
             output = diffusion(input_latents, context, time_embedding)
             if use_cfg:
