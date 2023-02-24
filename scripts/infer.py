@@ -813,11 +813,12 @@ def sample(
     models,
     text_prompt: str,
     image_prompt=None,
+    num_samples: int = 1,
     width: int = 512,
     height: int = 512,
+    seed: int = 65536,
     num_denoising_steps: int = 50,
     cfg_scale: int = 7.5,
-    seed: int = 65536,
     sampler: str = "k_lms",
     device="cuda",
 ):
@@ -844,9 +845,9 @@ def sample(
         expand=True,
     )
 
-    prompts = [text_prompt]
+    prompts = [text_prompt] * num_samples
 
-    uncond_prompts = [""]
+    uncond_prompts = [""] * num_samples
 
     upload_input_image = False
     input_images = None  # [Image.open(path)]
@@ -977,6 +978,8 @@ def sample(
         images = decoder(latents)
         del decoder
 
+        print(images.size())
+
         images = util.rescale(images, (-1, 1), (0, 255), clamp=True)
         images = util.move_channel(images, to="last")
         images = images.to("cpu", torch.uint8).numpy()
@@ -999,12 +1002,13 @@ if __name__ == "__main__":
         type=str,
         default=None,
     )
+    parser.add_argument("--num-samples", type=int, default=1)
     parser.add_argument("--width", type=int, default=512)
     parser.add_argument("--height", type=int, default=512)
     parser.add_argument("--seed", type=int, default=65536)
+    parser.add_argument("--num_denoising_steps", type=int, default=50)
     parser.add_argument("--cfg-scale", type=float, default=7.5)
     parser.add_argument("--sampler", type=str, default="k_lms")
-    parser.add_argument("--num_denoising_steps", type=int, default=50)
     parser.add_argument("--output-dir", type=str, default="samples")
 
     args = parser.parse_args()
@@ -1014,12 +1018,13 @@ if __name__ == "__main__":
         models=models,
         text_prompt=args.text_prompt,
         image_prompt=args.image_prompt,
+        num_samples=args.num_samples,
         width=args.width,
         height=args.height,
         seed=args.seed,
+        num_denoising_steps=args.num_denoising_steps,
         cfg_scale=args.cfg_scale,
         sampler=args.sampler,
-        num_denoising_steps=args.num_denoising_steps,
     )
 
     output_path = Path(args.output_dir)
