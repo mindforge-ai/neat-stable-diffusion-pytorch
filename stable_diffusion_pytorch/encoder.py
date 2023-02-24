@@ -19,16 +19,16 @@ class Encoder(nn.Module):
             ResidualBlock(512, 512),
             nn.Conv2d(512, 512, kernel_size=3, stride=2, padding=1),
             ResidualBlock(512, 512),
-            ResidualBlock(512, 512)
+            ResidualBlock(512, 512),
         )
         self.mid = nn.Sequential(
-            ResidualBlock(512, 512),
-            EncoderAttentionBlock(512),
-            ResidualBlock(512, 512)
+            ResidualBlock(512, 512), EncoderAttentionBlock(512), ResidualBlock(512, 512)
         )
         self.norm_out = nn.GroupNorm(32, 512)
         self.silu = nn.SiLU()
-        self.unknown_conv = nn.Conv2d(512, num_latent_channels, kernel_size=3, padding=1)
+        self.unknown_conv = nn.Conv2d(
+            512, num_latent_channels, kernel_size=3, padding=1
+        )
         self.quant_conv = nn.Conv2d(8, 8, kernel_size=1)
         """ self.conv_out = nn.Conv2d(
                 num_latent_channels, num_latent_channels, kernel_size=1, padding=0
@@ -57,7 +57,9 @@ class Encoder(nn.Module):
         x *= 0.18215
         return x
 
+
 # Legacy
+
 
 class LegacyEncoder(nn.Sequential):
     def __init__(self):

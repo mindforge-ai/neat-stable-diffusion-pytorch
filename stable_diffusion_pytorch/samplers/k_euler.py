@@ -2,7 +2,7 @@ import numpy as np
 from .. import util
 
 
-class KEulerSampler():
+class KEulerSampler:
     def __init__(self, n_inference_steps=50, n_training_steps=1000):
         timesteps = np.linspace(n_training_steps - 1, 0, n_inference_steps)
 
@@ -12,7 +12,7 @@ class KEulerSampler():
         log_sigmas = np.interp(timesteps, range(n_training_steps), log_sigmas)
         sigmas = np.exp(log_sigmas)
         sigmas = np.append(sigmas, 0)
-        
+
         self.sigmas = sigmas
         self.initial_scale = sigmas.max()
         self.timesteps = timesteps
@@ -24,11 +24,13 @@ class KEulerSampler():
         if step_count is None:
             step_count = self.step_count
         sigma = self.sigmas[step_count]
-        return 1 / (sigma ** 2 + 1) ** 0.5
+        return 1 / (sigma**2 + 1) ** 0.5
 
     def set_strength(self, strength=1):
         start_step = self.n_inference_steps - int(self.n_inference_steps * strength)
-        self.timesteps = np.linspace(self.n_training_steps - 1, 0, self.n_inference_steps)
+        self.timesteps = np.linspace(
+            self.n_training_steps - 1, 0, self.n_inference_steps
+        )
         self.timesteps = self.timesteps[start_step:]
         self.initial_scale = self.sigmas[start_step]
         self.step_count = start_step

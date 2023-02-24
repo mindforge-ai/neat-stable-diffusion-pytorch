@@ -9,20 +9,20 @@ from . import model_loader
 
 
 def generate(
-        prompts,
-        uncond_prompts=None,
-        input_images=None,
-        strength=0.8,
-        do_cfg=True,
-        cfg_scale=7.5,
-        height=512,
-        width=512,
-        sampler="k_lms",
-        n_inference_steps=50,
-        models={},
-        seed=None,
-        device=None,
-        idle_device=None
+    prompts,
+    uncond_prompts=None,
+    input_images=None,
+    strength=0.8,
+    do_cfg=True,
+    cfg_scale=7.5,
+    height=512,
+    width=512,
+    sampler="k_lms",
+    n_inference_steps=50,
+    models={},
+    seed=None,
+    device=None,
+    idle_device=None,
 ):
     r"""
     Function invoked when calling the pipeline for generation.
@@ -75,13 +75,19 @@ def generate(
             raise ValueError("prompts must be a non-empty list or tuple")
 
         if uncond_prompts and not isinstance(uncond_prompts, (list, tuple)):
-            raise ValueError("uncond_prompts must be a non-empty list or tuple if provided")
+            raise ValueError(
+                "uncond_prompts must be a non-empty list or tuple if provided"
+            )
         if uncond_prompts and len(prompts) != len(uncond_prompts):
-            raise ValueError("length of uncond_prompts must be same as length of prompts")
+            raise ValueError(
+                "length of uncond_prompts must be same as length of prompts"
+            )
         uncond_prompts = uncond_prompts or [""] * len(prompts)
 
         if input_images and not isinstance(uncond_prompts, (list, tuple)):
-            raise ValueError("input_images must be a non-empty list or tuple if provided")
+            raise ValueError(
+                "input_images must be a non-empty list or tuple if provided"
+            )
         if input_images and len(prompts) != len(input_images):
             raise ValueError("length of input_images must be same as length of prompts")
         if not 0 < strength < 1:
@@ -91,7 +97,7 @@ def generate(
             raise ValueError("height and width must be a multiple of 8")
 
         if device is None:
-            device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         if idle_device:
             to_idle = lambda x: x.to(idle_device)
@@ -105,7 +111,7 @@ def generate(
             generator.manual_seed(seed)
 
         tokenizer = Tokenizer()
-        clip = models.get('clip') or model_loader.load_clip(device)
+        clip = models.get("clip") or model_loader.load_clip(device)
         clip.to(device)
         if do_cfg:
             cond_tokens = tokenizer.encode_batch(prompts)
@@ -127,19 +133,19 @@ def generate(
         elif sampler == "k_euler":
             sampler = KEulerSampler(n_inference_steps=n_inference_steps)
         elif sampler == "k_euler_ancestral":
-            sampler = KEulerAncestralSampler(n_inference_steps=n_inference_steps,
-                                             generator=generator)
+            sampler = KEulerAncestralSampler(
+                n_inference_steps=n_inference_steps, generator=generator
+            )
         else:
             raise ValueError(
                 "Unknown sampler value %s. "
-                "Accepted values are {k_lms, k_euler, k_euler_ancestral}"
-                % sampler
+                "Accepted values are {k_lms, k_euler, k_euler_ancestral}" % sampler
             )
 
         noise_shape = (len(prompts), 4, height // 8, width // 8)
 
         if input_images:
-            encoder = models.get('encoder') or model_loader.load_encoder(device)
+            encoder = models.get("encoder") or model_loader.load_encoder(device)
             encoder.to(device)
             processed_input_images = []
             for input_image in input_images:
@@ -170,7 +176,7 @@ def generate(
             latents = torch.randn(noise_shape, generator=generator, device=device)
             latents *= sampler.initial_scale
 
-        diffusion = models.get('diffusion') or model_loader.load_diffusion(device)
+        diffusion = models.get("diffusion") or model_loader.load_diffusion(device)
         diffusion.to(device)
 
         timesteps = tqdm(sampler.timesteps)
@@ -191,7 +197,7 @@ def generate(
         to_idle(diffusion)
         del diffusion
 
-        decoder = models.get('decoder') or model_loader.load_decoder(device)
+        decoder = models.get("decoder") or model_loader.load_decoder(device)
         decoder.to(device)
         images = decoder(latents)
         to_idle(decoder)
@@ -199,6 +205,6 @@ def generate(
 
         images = util.rescale(images, (-1, 1), (0, 255), clamp=True)
         images = util.move_channel(images, to="last")
-        images = images.to('cpu', torch.uint8).numpy()
+        images = images.to("cpu", torch.uint8).numpy()
 
         return [Image.fromarray(image) for image in images]
