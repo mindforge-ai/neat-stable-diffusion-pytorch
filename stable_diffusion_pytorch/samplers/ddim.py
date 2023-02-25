@@ -23,12 +23,12 @@ class DDIMSampler:
 
         # Stable Diffusion uses a `scaled_linear` schedule with beta_start 0.00085 and beta_end 0.012.
         self.betas = (
-            torch.linspace(0.00085**0.5, 0.012**0.5, num_training_steps) ** 2
+            torch.linspace(0.00085**0.5, 0.012**0.5, num_training_steps, device=0) ** 2
         )
 
         self.alphas = 1 - self.betas
         self.alpha_bar = torch.cumprod(
-            self.alphas, dim=0
+            self.alphas, dim=0,
         )  # cumprod is a trick  when adding noise, allowing us to find the noise at the chosen timestep without iterating from 0 to the timestep.
 
     def forward_sample(

@@ -2,7 +2,7 @@ import torch
 from stable_diffusion_pytorch import Tokenizer, CLIP, Encoder, Decoder, Diffusion
 from stable_diffusion_pytorch import util
 from stable_diffusion_pytorch.samplers import (
-    DDPMSampler,
+    DDIMSampler,
 )
 from infer import sample
 
@@ -131,7 +131,7 @@ if __name__ == "__main__":
         eps=1e-8,
     )
 
-    noise_scheduler = DDPMSampler(num_steps=args.sampler_num_train_steps)
+    noise_scheduler = DDIMSampler(num_inference_steps=args.sampler_num_train_steps)
 
     processed_input_images = []
     for input_image in list(Path(args.data_dir).iterdir()):
@@ -207,7 +207,7 @@ if __name__ == "__main__":
                 # At timestep 1000, it's pure noise. At timestep 0, it's the original latents. At timestep 500, it's half noise and half original latents.
                 # Internally, there is some variance (the betas schedule) in the amount of noise added. So the above line is not exactly true.
 
-                noisy_latents = noise_scheduler.add_noise(latents, noise, timesteps)
+                noisy_latents = noise_scheduler.forward_sample(latents, timesteps, noise=noise)
 
                 # this data should come from dataloader
                 tokens = tokenizer.encode_batch(["zwx man"])
