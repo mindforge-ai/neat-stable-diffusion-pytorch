@@ -2,9 +2,7 @@ import torch
 from stable_diffusion_pytorch import Tokenizer, CLIP, Encoder, Decoder, Diffusion
 from stable_diffusion_pytorch import util
 from stable_diffusion_pytorch.samplers import (
-    KLMSSampler,
-    KEulerSampler,
-    KEulerAncestralSampler,
+    PNDMSampler,
 )
 from infer import sample
 
@@ -133,7 +131,7 @@ if __name__ == "__main__":
         eps=1e-8,
     )
 
-    noise_scheduler = KLMSSampler(num_training_steps=args.sampler_num_train_steps)
+    noise_scheduler = PNDMSampler(num_train_timesteps=args.sampler_num_train_steps)
 
     processed_input_images = []
     for input_image in list(Path(args.data_dir).iterdir()):
@@ -173,7 +171,7 @@ if __name__ == "__main__":
                 )
 
                 latents = vae(input_images_tensor, noise=encoder_noise, calculate_posterior=True)
-                latents = latents * 0.18215
+                latents = latents * 0.18215 # vae scaling factor
 
                 # Sample a random timestep for each image
                 timesteps = torch.randint(
@@ -184,20 +182,16 @@ if __name__ == "__main__":
                 )
                 timesteps = timesteps.long()
 
-                step_indices = [(noise_scheduler.timesteps == t).nonzero().item() for t in timesteps] # seems to be 1000 - timesteps equivalent
-
-                sigma = noise_scheduler.sigmas[step_indices]
-
                 latents_noise = torch.randn(
-                    noise_shape,
+                    latents.size(),
                     generator=generator,
-                    device=latents.device,
+                    device=args.device,
                 )
 
-                noisy_latents = latents + latents_noise * sigma
+                noisy_latents = noise_scheduler.add_noise(latents, latents_noise, timesteps)
 
                 # this data should come from dataloader
-                tokens = tokenizer.encode_batch(["zwx lip balm"])
+                tokens = tokenizer.encode_batch(["zwx man"])
                 tokens = torch.tensor(tokens, device=args.device)
                 encoder_hidden_states = text_encoder(tokens)
 
@@ -229,11 +223,11 @@ if __name__ == "__main__":
                             "unet": unet,
                             "text_encoder": text_encoder,
                         },
-                        text_prompt="zwx lip balm",
+                        text_prompt="zwx man",
                         num_samples=2,
                         show_progress=False,
                     )
-                    writer.add_images("images/samples", images, global_step)
+                    writer.add_images("images/samples", images, global_step, dataformats="NHWC")
 
                 progress.update(task, advance=1)
 
