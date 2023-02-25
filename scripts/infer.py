@@ -6,7 +6,6 @@ from stable_diffusion_pytorch import (
     Decoder,
     Diffusion,
     LegacyDecoder,
-    LegacyEncoder,
 )
 from stable_diffusion_pytorch import util
 from stable_diffusion_pytorch.samplers import (
@@ -26,6 +25,7 @@ from rich.progress import (
 from PIL import Image
 from pathlib import Path
 import numpy as np
+from contextlib import nullcontext
 
 torch.set_printoptions(precision=20)
 np.set_printoptions(precision=20)
@@ -802,10 +802,10 @@ def load_model(module, weights_path, device):
 
 def preload_models(device):
     return {
-        "clip": load_model(CLIP, "data/ckpt/clip.pt", device),
+        "text_encoder": load_model(CLIP, "data/ckpt/clip.pt", device),
         "encoder": load_model(Encoder, "data/ckpt/encoder.pt", device),
         "decoder": load_model(Decoder, "data/ckpt/decoder.pt", device),
-        "diffusion": load_model(Diffusion, "data/ckpt/unet.pt", device),
+        "unet": load_model(Diffusion, "data/ckpt/unet.pt", device),
     }
 
 
@@ -821,29 +821,23 @@ def sample(
     cfg_scale: int = 7.5,
     sampler: str = "k_lms",
     device="cuda",
+    show_progress: bool = True,
 ):
-    text_column = TextColumn("{task.description}")
-    bar_column = BarColumn(bar_width=None)
-    m_of_n_complete_column = MofNCompleteColumn()
-    time_elapsed_column = TimeElapsedColumn()
-    time_remaining_column = TimeRemainingColumn()
-    progress = Progress(
-        text_column,
-        bar_column,
-        m_of_n_complete_column,
-        time_elapsed_column,
-        time_remaining_column,
-        expand=True,
-    )
+    if show_progress:
+        text_column = TextColumn("{task.description}")
+        bar_column = BarColumn(bar_width=None)
+        m_of_n_complete_column = MofNCompleteColumn()
+        time_elapsed_column = TimeElapsedColumn()
+        time_remaining_column = TimeRemainingColumn()
 
-    progress = Progress(
-        text_column,
-        bar_column,
-        m_of_n_complete_column,
-        time_elapsed_column,
-        time_remaining_column,
-        expand=True,
-    )
+        progress = Progress(
+            text_column,
+            bar_column,
+            m_of_n_complete_column,
+            time_elapsed_column,
+            time_remaining_column,
+            expand=True,
+        )
 
     prompts = [text_prompt] * num_samples
 
@@ -859,7 +853,7 @@ def sample(
     else:
         use_cfg = True
 
-    with torch.inference_mode(), progress:
+    with torch.inference_mode(), progress if show_progress else nullcontext():
         if not isinstance(prompts, (list, tuple)) or not prompts:
             raise ValueError("prompts must be a non-empty list or tuple")
 
@@ -888,23 +882,23 @@ def sample(
         generator = torch.Generator(device=device).manual_seed(seed)
 
         tokenizer = Tokenizer()
-        clip = models["clip"]
+        text_encoder = models["text_encoder"]
         if use_cfg:
             cond_tokens = tokenizer.encode_batch(prompts)
             cond_tokens = torch.tensor(cond_tokens, dtype=torch.long, device=device)
-            cond_context = clip(cond_tokens)
+            cond_context = text_encoder(cond_tokens)
             uncond_tokens = tokenizer.encode_batch(uncond_prompts)
             uncond_tokens = torch.tensor(uncond_tokens, dtype=torch.long, device=device)
-            uncond_context = clip(uncond_tokens)
+            uncond_context = text_encoder(uncond_tokens)
             context = torch.cat([cond_context, uncond_context])  # [2, 77, 768]
         else:
             tokens = tokenizer.encode_batch(prompts)
             tokens = torch.tensor(tokens, dtype=torch.long, device=device)
-            context = clip(tokens)  # [1, 77, 768]
-        del tokenizer, clip
+            context = text_encoder(tokens)  # [1, 77, 768]
+        del tokenizer, text_encoder
 
         if sampler == "k_lms":
-            sampler = KLMSSampler(n_inference_steps=num_denoising_steps)
+            sampler = KLMSSampler(num_inference_steps=num_denoising_steps, inference_mode=True)
         elif sampler == "k_euler":
             sampler = KEulerSampler(n_inference_steps=num_denoising_steps)
         elif sampler == "k_euler_ancestral":
@@ -937,12 +931,10 @@ def sample(
             _, _, height, width = input_images_tensor.shape
             noise_shape = (len(prompts), 4, height // 8, width // 8)
 
-            latents = encoder(input_images_tensor)
+            latents = encoder(input_images_tensor) # needs work
 
             latents_noise = torch.randn(noise_shape, generator=generator, device=device)
-            sampler.set_strength(
-                strength=strength
-            )  # proxy for timestep TODO: change to timestep
+
             latents += latents_noise * sampler.initial_scale
 
             del encoder, processed_input_images, input_images_tensor, latents_noise
@@ -950,9 +942,9 @@ def sample(
             latents = torch.randn(noise_shape, generator=generator, device=device)
             latents *= sampler.initial_scale
 
-        diffusion = models["diffusion"]
+        unet = models["unet"]
 
-        timesteps = progress.track(sampler.timesteps, description="Denoising...")
+        timesteps = progress.track(sampler.timesteps, description="Denoising...") if show_progress else sampler.timesteps
         for timestep in timesteps:
             time_embedding = util.get_time_embedding(
                 timestep, dtype=torch.float32, device=latents.device
@@ -963,7 +955,7 @@ def sample(
                     2, 1, 1, 1
                 )  # Use same Gaussian noise for both latents
 
-            output = diffusion(input_latents, context, time_embedding)
+            output = unet(input_latents, context, time_embedding)
             if use_cfg:
                 output_cond, output_uncond = output.chunk(
                     2
@@ -972,21 +964,16 @@ def sample(
 
             latents = sampler.step(latents, output)
 
-        del diffusion
+        del unet
 
         decoder = models["decoder"]
         images = decoder(latents)
         del decoder
 
-        print(images.size())
-
         images = util.rescale(images, (-1, 1), (0, 255), clamp=True)
-        images = util.move_channel(images, to="last")
-        images = images.to("cpu", torch.uint8).numpy()
+        # images = util.move_channel(images, to="last")
 
-        images = [Image.fromarray(image) for image in images]
-
-        return images
+        return images.to("cpu", torch.uint8).numpy()
 
 
 if __name__ == "__main__":
@@ -1027,6 +1014,8 @@ if __name__ == "__main__":
         sampler=args.sampler,
     )
 
+    images = [Image.fromarray(image) for image in images]
+    
     output_path = Path(args.output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
     for image in images:

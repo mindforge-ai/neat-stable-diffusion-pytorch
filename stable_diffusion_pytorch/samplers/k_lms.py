@@ -7,21 +7,34 @@ np.set_printoptions(precision=20)
 
 
 class KLMSSampler:
-    def __init__(self, n_inference_steps=50, n_training_steps=1000, lms_order=4):
-        alphas_cumprod = util.get_alphas_cumprod(n_training_steps=n_training_steps)
-        timesteps = np.linspace(
-            0, n_training_steps - 1, n_inference_steps, dtype=float
-        )[::-1].copy()
-        sigmas = np.array(((1 - alphas_cumprod) / alphas_cumprod) ** 0.5)
-        sigmas = np.interp(timesteps, np.arange(0, len(sigmas)), sigmas)
-        sigmas = np.concatenate([sigmas, [0.0]]).astype(np.float32)
-        self.sigmas = torch.from_numpy(sigmas).to(device=0)
+    def __init__(self, num_inference_steps=50, num_training_steps=1000, lms_order=4, inference_mode=False):
+        self.betas = torch.linspace(0.00085**0.5, 0.012**0.5, num_training_steps) ** 2 # beta_start and beta_end of scaled_linear
+        self.alphas = 1 - self.betas
+        alphas_cumprod = torch.cumprod(self.alphas, dim=0)
+
+        if inference_mode:
+            timesteps = np.linspace(0, num_training_steps - 1, num_inference_steps, dtype=float)[::-1].copy()
+        else:
+            timesteps = np.linspace(
+                0, num_training_steps - 1, num_training_steps, dtype=float
+            )[::-1].copy()
+
         self.timesteps = torch.from_numpy(timesteps).to(device=0)
+
+        sigmas = og_sigmas = np.array(((1 - alphas_cumprod) / alphas_cumprod) ** 0.5)
+        if inference_mode:
+            sigmas = np.interp(timesteps, np.arange(0, len(sigmas)), sigmas)
+            sigmas = np.concatenate([sigmas, [0.0]]).astype(np.float32)
+            og_sigmas = np.concatenate([og_sigmas[::-1], [0.0]]).astype(np.float32)
+        else:
+            sigmas = np.concatenate([sigmas[::-1], [0.0]]).astype(np.float32)
+        self.sigmas = torch.from_numpy(sigmas).to(device=0)
+
         self.derivatives = []
 
-        self.initial_scale = sigmas.max()
-        self.n_inference_steps = n_inference_steps
-        self.n_training_steps = n_training_steps
+        self.initial_scale = og_sigmas.max() # initial_scale = init_noise_sigma, comes from the max of the full `training_sigmas`
+        self.num_inference_steps = num_inference_steps
+        self.num_training_steps = num_training_steps
         self.lms_order = lms_order
         self.step_count = 0
         self.outputs = []
@@ -32,15 +45,6 @@ class KLMSSampler:
         sigma = self.sigmas[step_count]
         scaled_input_latent = input_latent / ((sigma**2 + 1) ** 0.5)
         return scaled_input_latent
-
-    def set_strength(self, strength=1):
-        start_step = self.n_inference_steps - int(self.n_inference_steps * strength)
-        self.timesteps = torch.linspace(
-            self.n_training_steps - 1, 0, self.n_inference_steps
-        )
-        self.timesteps = self.timesteps[start_step:]
-        self.initial_scale = self.sigmas[start_step]
-        self.step_count = start_step
 
     def get_lms_coefficient(self, order, t, current_order):
         """

@@ -34,7 +34,7 @@ class Encoder(nn.Module):
                 num_latent_channels, num_latent_channels, kernel_size=1, padding=0
             )  # quant_conv in HF diffusers """
 
-    def forward(self, x, noise):
+    def forward(self, x, noise=None, calculate_posterior=False):
         x = self.conv_in(x)
         x = self.down(x)
         x = self.mid(x)
@@ -43,57 +43,18 @@ class Encoder(nn.Module):
         x = self.unknown_conv(x)
         # x = self.conv_out(x)
 
-        x = self.quant_conv(x)
+        x = self.quant_conv(x) # called "moments" in HF diffusers
+
+        if not calculate_posterior:
+            return x
 
         # Below is the ~equivalent of DiagonalGaussianDistribution in HF
 
         mean, log_variance = torch.chunk(x, 2, dim=1)
         log_variance = torch.clamp(log_variance, -30, 20)
-        variance = log_variance.exp()
-        stdev = variance.sqrt()
-        x = mean + stdev * noise
+        stdev = torch.exp(0.5 * log_variance)
+        variance = torch.exp(log_variance)
 
-        # anecdotally, the below scaling seems ~insignificant, perhaps without it the image is a bit less smooth
-        x *= 0.18215
-        return x
-
-
-# Legacy
-
-
-class LegacyEncoder(nn.Sequential):
-    def __init__(self):
-        super().__init__(
-            nn.Conv2d(3, 128, kernel_size=3, padding=1),
-            ResidualBlock(128, 128),
-            ResidualBlock(128, 128),
-            nn.Conv2d(128, 128, kernel_size=3, stride=2, padding=1),
-            ResidualBlock(128, 256),
-            ResidualBlock(256, 256),
-            nn.Conv2d(256, 256, kernel_size=3, stride=2, padding=1),
-            ResidualBlock(256, 512),
-            ResidualBlock(512, 512),
-            nn.Conv2d(512, 512, kernel_size=3, stride=2, padding=1),
-            ResidualBlock(512, 512),
-            ResidualBlock(512, 512),
-            ResidualBlock(512, 512),
-            AttentionBlock(512),
-            ResidualBlock(512, 512),
-            nn.GroupNorm(32, 512),
-            nn.SiLU(),
-            nn.Conv2d(512, 8, kernel_size=3, padding=1),
-            nn.Conv2d(8, 8, kernel_size=1, padding=0),
-        )
-
-    def forward(self, x, noise):
-        for module in self:
-            x = module(x)
-
-        mean, log_variance = torch.chunk(x, 2, dim=1)
-        log_variance = torch.clamp(log_variance, -30, 20)
-        variance = log_variance.exp()
-        stdev = variance.sqrt()
-        x = mean + stdev * noise
-
-        x *= 0.18215
-        return x
+        if noise is not None:
+            x = mean + stdev * noise
+            return x

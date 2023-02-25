@@ -6,7 +6,7 @@ from stable_diffusion_pytorch.samplers import (
     KEulerSampler,
     KEulerAncestralSampler,
 )
-from .infer import sample
+from infer import sample
 
 import argparse
 from rich.progress import (
@@ -22,6 +22,7 @@ from pathlib import Path
 import numpy as np
 import torch.nn.functional as F
 import itertools
+from torchvision import transforms
 from torch.utils.tensorboard import SummaryWriter
 
 writer = SummaryWriter()
@@ -112,9 +113,11 @@ if __name__ == "__main__":
 
     text_encoder = CLIP().to(args.device)
     text_encoder.load_state_dict(torch.load("data/ckpt/clip.pt"))
+    text_encoder.requires_grad_(False)
 
     vae = Encoder().to(args.device)
     vae.load_state_dict(torch.load("data/ckpt/encoder.pt"))
+    vae.requires_grad_(False)
 
     decoder = Decoder().to(args.device)
     decoder.load_state_dict(torch.load("data/ckpt/decoder.pt"))
@@ -130,92 +133,109 @@ if __name__ == "__main__":
         eps=1e-8,
     )
 
-    noise_scheduler = KLMSSampler(n_inference_steps=args.sampler_num_train_steps)
+    noise_scheduler = KLMSSampler(num_training_steps=args.sampler_num_train_steps)
 
     processed_input_images = []
     for input_image in list(Path(args.data_dir).iterdir()):
         input_image = Image.open(input_image)
-        input_image = input_image.resize((args.width, args.height))
-        input_image = np.array(input_image)
-        input_image = torch.tensor(input_image).float()
-        input_image = util.rescale(input_image, (0, 255), (-1, 1))
+        input_image = transforms.Compose(
+            [
+                transforms.Resize((args.height, args.width)),
+                transforms.ToTensor(),
+            ]
+        )(input_image)
+
+        input_image = util.move_channel(input_image.unsqueeze(0), to="last").squeeze(0) # fix this abomination
+
         processed_input_images.append(input_image)
 
-    for epoch in range(args.num_epochs):
-        text_encoder.train()
-        vae.train()
-        unet.train()
-        for step, batch in enumerate(
-            processed_input_images
-        ):  # iterate through Dataloader
-            # shift the below logic into the dataloader
-            input_images_tensor = torch.tensor(batch, device=args.device).unsqueeze(0)
-            input_images_tensor = util.move_channel(input_images_tensor, to="first")
+    writer.add_images("images/instances", np.asarray([x.cpu().numpy() for x in processed_input_images]), dataformats="NHWC")
 
-            batch_len, _, height, width = input_images_tensor.shape
-            noise_shape = (1, 4, height // 8, width // 8)
+    with progress:
+        task = progress.add_task("Training...", total=args.num_epochs * len(processed_input_images))
+        for epoch in range(args.num_epochs):
+            # text_encoder.train()
+            unet.train()
+            for step, batch in enumerate(
+                processed_input_images
+            ):  # iterate through Dataloader
+                # shift the below logic into the dataloader
+                input_images_tensor = torch.tensor(batch, device=args.device).unsqueeze(0)
+                input_images_tensor = util.move_channel(input_images_tensor, to="first")
 
-            encoder_noise = torch.randn(
-                noise_shape,
-                generator=generator,
-                device=args.device,
-            )
+                batch_len, _, height, width = input_images_tensor.shape
+                noise_shape = (1, 4, height // 8, width // 8)
 
-            latents = vae(input_images_tensor, encoder_noise)
-
-            latents_noise = torch.randn(
-                noise_shape,
-                generator=generator,
-                device=latents.device,
-            )
-
-            # Sample a random timestep for each image
-            timesteps = torch.randint(
-                0,
-                args.sampler_num_train_steps,
-                (batch_len,),
-                device=latents.device,
-            )
-            timesteps = timesteps.long()
-
-            noisy_latents = latents + latents_noise * noise_scheduler.sigmas[timesteps]
-
-            # this data should come from dataloader
-            tokens = tokenizer.encode_batch(["minecraft video"])
-            tokens = torch.tensor(tokens, device=args.device)
-            encoder_hidden_states = text_encoder(tokens)
-
-            time_embedding = util.get_time_embedding(
-                timesteps, dtype=torch.float32, device=args.device
-            )
-
-            # Predict the noise residual
-            output = unet(noisy_latents, encoder_hidden_states, time_embedding)
-
-            target = latents_noise
-
-            loss = F.mse_loss(output.float(), target.float(), reduction="mean")
-
-            loss.backward()
-            optimizer.step()
-            # lr_scheduler.step()
-            optimizer.zero_grad()
-
-            # create global step from epoch and step
-            global_step = epoch * len(processed_input_images) + step
-            writer.add_scalar("Loss/train", loss.detach().item(), global_step)
-
-            if global_step % args.sample_interval == 0:
-                images = sample(
-                    models={
-                        "encoder": vae,
-                        "decoder": decoder,
-                        "unet": unet,
-                        "text_encoder": text_encoder,
-                    },
-                    text_prompt="minecraft video",
+                encoder_noise = torch.randn(
+                    noise_shape,
+                    generator=generator,
+                    device=args.device,
                 )
-                writer.add_image("Sample", img_grid)
+
+                latents = vae(input_images_tensor, noise=encoder_noise, calculate_posterior=True)
+                latents = latents * 0.18215
+
+                # Sample a random timestep for each image
+                timesteps = torch.randint(
+                    0,
+                    args.sampler_num_train_steps,
+                    (batch_len,),
+                    device=latents.device,
+                )
+                timesteps = timesteps.long()
+
+                step_indices = [(noise_scheduler.timesteps == t).nonzero().item() for t in timesteps] # seems to be 1000 - timesteps equivalent
+
+                sigma = noise_scheduler.sigmas[step_indices]
+
+                latents_noise = torch.randn(
+                    noise_shape,
+                    generator=generator,
+                    device=latents.device,
+                )
+
+                noisy_latents = latents + latents_noise * sigma
+
+                # this data should come from dataloader
+                tokens = tokenizer.encode_batch(["zwx lip balm"])
+                tokens = torch.tensor(tokens, device=args.device)
+                encoder_hidden_states = text_encoder(tokens)
+
+                time_embedding = util.get_time_embedding(
+                    timesteps, dtype=torch.float32, device=args.device
+                )
+
+                # Predict the noise residual
+                output = unet(noisy_latents, encoder_hidden_states, time_embedding)
+
+                target = latents_noise
+
+                loss = F.mse_loss(output.float(), target.float(), reduction="mean")
+
+                loss.backward()
+                optimizer.step()
+                # lr_scheduler.step()
+                optimizer.zero_grad()
+
+                # create global step from epoch and step
+                global_step = epoch * len(processed_input_images) + step
+                writer.add_scalar("loss/train", loss.detach().item(), global_step)
+                
+                if global_step % args.sample_interval == 0:
+                    images = sample(
+                        models={
+                            "encoder": vae,
+                            "decoder": decoder,
+                            "unet": unet,
+                            "text_encoder": text_encoder,
+                        },
+                        text_prompt="zwx lip balm",
+                        num_samples=2,
+                        show_progress=False,
+                    )
+                    writer.add_images("images/samples", images, global_step)
+
+                progress.update(task, advance=1)
 
     writer.flush()
     writer.close()
