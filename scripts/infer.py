@@ -8,9 +8,7 @@ from stable_diffusion_pytorch import (
     LegacyDecoder,
 )
 from stable_diffusion_pytorch import util
-from stable_diffusion_pytorch.samplers import (
-    PNDMSampler
-)
+from stable_diffusion_pytorch.samplers import DDIMSampler
 import argparse
 from rich.progress import (
     Progress,
@@ -815,9 +813,9 @@ def sample(
     width: int = 512,
     height: int = 512,
     seed: int = 65536,
-    num_denoising_steps: int = 50,
+    num_inference_steps: int = 50,
     cfg_scale: int = 7.5,
-    sampler: str = "pndm",
+    sampler: str = "ddim",
     device="cuda",
     show_progress: bool = True,
 ):
@@ -895,12 +893,11 @@ def sample(
             context = text_encoder(tokens)  # [1, 77, 768]
         del tokenizer, text_encoder
 
-        if sampler == "pndm":
-            sampler = PNDMSampler(num_inference_timesteps=num_denoising_steps)
+        if sampler == "ddim":
+            sampler = DDIMSampler(num_inference_steps=num_inference_steps)
         else:
             raise ValueError(
-                "Unknown sampler value %s. "
-                "Accepted values are {pndm}" % sampler
+                "Unknown sampler value %s. " "Accepted values are {ddim}" % sampler
             )
 
         noise_shape = (len(prompts), 4, height // 8, width // 8)
@@ -923,7 +920,7 @@ def sample(
             _, _, height, width = input_images_tensor.shape
             noise_shape = (len(prompts), 4, height // 8, width // 8)
 
-            latents = encoder(input_images_tensor) # needs work
+            latents = encoder(input_images_tensor)  # needs work
 
             latents_noise = torch.randn(noise_shape, generator=generator, device=device)
 
@@ -931,14 +928,19 @@ def sample(
 
             del encoder, processed_input_images, input_images_tensor, latents_noise
         else:
+            # During training, the UNET learned to map the data distribution to the Gaussian distribution of random noise.
+            # So we can use pure noise as input to the UNET, simulating the existence of 'an underlying image' which has been corrupted by pure noise.
+            # The trick: that 'underlying image' doesn't exist and we're creating the image out of thin air.
             latents = torch.randn(noise_shape, generator=generator, device=device)
-            latents *= sampler.init_noise_sigma
+            # latents *= sampler.init_noise_sigma
 
         unet = models["unet"]
 
-        sampler.set_timesteps(num_denoising_steps)
-
-        timesteps = progress.track(sampler.timesteps, description="Denoising...") if show_progress else sampler.timesteps
+        timesteps = (
+            progress.track(sampler.timesteps, description="Denoising...")
+            if show_progress
+            else sampler.timesteps
+        )
         for timestep in timesteps:
             time_embedding = util.get_time_embedding(
                 timestep, dtype=torch.float32, device=latents.device
@@ -956,7 +958,9 @@ def sample(
                 )  # output_uncond is a 'random' image from the distribution of realistic images
                 output = cfg_scale * (output_cond - output_uncond) + output_uncond
 
-            latents = sampler.step(output, timestep, latents) # might be timestep instead
+            latents = sampler.reverse_sample(
+                output, timestep, latents
+            )  # might be timestep instead
 
         del unet
 
@@ -987,9 +991,9 @@ if __name__ == "__main__":
     parser.add_argument("--width", type=int, default=512)
     parser.add_argument("--height", type=int, default=512)
     parser.add_argument("--seed", type=int, default=65536)
-    parser.add_argument("--num_denoising_steps", type=int, default=50)
+    parser.add_argument("--num_inference_steps", type=int, default=50)
     parser.add_argument("--cfg-scale", type=float, default=7.5)
-    parser.add_argument("--sampler", type=str, default="pndm")
+    parser.add_argument("--sampler", type=str, default="ddim")
     parser.add_argument("--output-dir", type=str, default="samples")
 
     args = parser.parse_args()
@@ -1003,15 +1007,14 @@ if __name__ == "__main__":
         width=args.width,
         height=args.height,
         seed=args.seed,
-        num_denoising_steps=args.num_denoising_steps,
+        num_inference_steps=args.num_inference_steps,
         cfg_scale=args.cfg_scale,
         sampler=args.sampler,
     )
 
     images = [Image.fromarray(image) for image in images]
-    
+
     output_path = Path(args.output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
     for image in images:
         image.save(f"{output_path}/{len(list(output_path.iterdir()))}.jpg")
-        

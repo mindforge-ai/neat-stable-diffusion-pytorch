@@ -43,7 +43,7 @@ class Encoder(nn.Module):
         x = self.unknown_conv(x)
         # x = self.conv_out(x)
 
-        x = self.quant_conv(x) # called "moments" in HF diffusers
+        x = self.quant_conv(x)  # called "moments" in HF diffusers
 
         if not calculate_posterior:
             return x

@@ -3,4 +3,4 @@ from .clip import CLIP
 from .encoder import Encoder
 from .decoder import Decoder, LegacyDecoder
 from .diffusion import Diffusion
-from .samplers import PNDMSampler
+from .samplers import PNDMSampler, DDPMSampler, DDIMSampler

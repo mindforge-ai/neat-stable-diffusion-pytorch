@@ -4,6 +4,7 @@ from typing import List, Optional, Tuple, Union
 import numpy as np
 import torch
 
+
 # Copied from diffusers.schedulers.scheduling_ddpm.betas_for_alpha_bar
 def betas_for_alpha_bar(num_diffusion_timesteps, max_beta=0.999):
     """
@@ -68,11 +69,14 @@ class PNDMSampler:
         self,
         num_train_timesteps: int = 1000,
         num_inference_timesteps: int = 50,
-        steps_offset: int = 0, # 1
+        steps_offset: int = 0,  # 1
     ):
         # this schedule is very specific to the latent diffusion model.
         self.betas = (
-            torch.linspace(0.00085**0.5, 0.012**0.5, num_train_timesteps, dtype=torch.float32) ** 2 # beta_start and beta_end
+            torch.linspace(
+                0.00085**0.5, 0.012**0.5, num_train_timesteps, dtype=torch.float32
+            )
+            ** 2  # beta_start and beta_end
         )
 
         self.alphas = 1.0 - self.betas
@@ -104,7 +108,9 @@ class PNDMSampler:
 
         self.steps_offset = steps_offset
 
-    def set_timesteps(self, num_inference_timesteps: int, device: Union[str, torch.device] = None):
+    def set_timesteps(
+        self, num_inference_timesteps: int, device: Union[str, torch.device] = None
+    ):
         """
         Sets the discrete timesteps used for the diffusion chain. Supporting function to be run before inference.
         Args:
@@ -123,11 +129,13 @@ class PNDMSampler:
         # produce better results. When using PNDM with `self.config.skip_prk_steps` the implementation
         # is based on crowsonkb's PLMS sampler implementation: https://github.com/CompVis/latent-diffusion/pull/51
         self.prk_timesteps = np.array([])
-        self.plms_timesteps = np.concatenate([self._timesteps[:-1], self._timesteps[-2:-1], self._timesteps[-1:]])[
-            ::-1
-        ].copy()
+        self.plms_timesteps = np.concatenate(
+            [self._timesteps[:-1], self._timesteps[-2:-1], self._timesteps[-1:]]
+        )[::-1].copy()
 
-        timesteps = np.concatenate([self.prk_timesteps, self.plms_timesteps]).astype(np.int64)
+        timesteps = np.concatenate([self.prk_timesteps, self.plms_timesteps]).astype(
+            np.int64
+        )
         self.timesteps = torch.from_numpy(timesteps).to(device)
 
         self.ets = []
@@ -156,7 +164,12 @@ class PNDMSampler:
             [`~schedulers.scheduling_utils.SchedulerOutput`] if `return_dict` is True, otherwise a `tuple`. When
             returning a tuple, the first element is the sample tensor.
         """
-        return self.step_plms(model_output=model_output, timestep=timestep, sample=sample, return_dict=return_dict)
+        return self.step_plms(
+            model_output=model_output,
+            timestep=timestep,
+            sample=sample,
+            return_dict=return_dict,
+        )
 
     def step_plms(
         self,
@@ -183,14 +196,18 @@ class PNDMSampler:
                 "Number of inference steps is 'None', you need to run 'set_timesteps' after creating the scheduler"
             )
 
-        prev_timestep = timestep - self.num_train_timesteps // self.num_inference_timesteps
+        prev_timestep = (
+            timestep - self.num_train_timesteps // self.num_inference_timesteps
+        )
 
         if self.counter != 1:
             self.ets = self.ets[-3:]
             self.ets.append(model_output)
         else:
             prev_timestep = timestep
-            timestep = timestep + self.num_train_timesteps // self.num_inference_timesteps
+            timestep = (
+                timestep + self.num_train_timesteps // self.num_inference_timesteps
+            )
 
         if len(self.ets) == 1 and self.counter == 0:
             model_output = model_output
@@ -202,11 +219,20 @@ class PNDMSampler:
         elif len(self.ets) == 2:
             model_output = (3 * self.ets[-1] - self.ets[-2]) / 2
         elif len(self.ets) == 3:
-            model_output = (23 * self.ets[-1] - 16 * self.ets[-2] + 5 * self.ets[-3]) / 12
+            model_output = (
+                23 * self.ets[-1] - 16 * self.ets[-2] + 5 * self.ets[-3]
+            ) / 12
         else:
-            model_output = (1 / 24) * (55 * self.ets[-1] - 59 * self.ets[-2] + 37 * self.ets[-3] - 9 * self.ets[-4])
+            model_output = (1 / 24) * (
+                55 * self.ets[-1]
+                - 59 * self.ets[-2]
+                + 37 * self.ets[-3]
+                - 9 * self.ets[-4]
+            )
 
-        prev_sample = self._get_prev_sample(sample, timestep, prev_timestep, model_output)
+        prev_sample = self._get_prev_sample(
+            sample, timestep, prev_timestep, model_output
+        )
         self.counter += 1
 
         return prev_sample
@@ -225,7 +251,11 @@ class PNDMSampler:
         # model_output -> e_θ(x_t, t)
         # prev_sample -> x_(t−δ)
         alpha_prod_t = self.alphas_cumprod[timestep]
-        alpha_prod_t_prev = self.alphas_cumprod[prev_timestep] if prev_timestep >= 0 else self.final_alpha_cumprod
+        alpha_prod_t_prev = (
+            self.alphas_cumprod[prev_timestep]
+            if prev_timestep >= 0
+            else self.final_alpha_cumprod
+        )
         beta_prod_t = 1 - alpha_prod_t
         beta_prod_t_prev = 1 - alpha_prod_t_prev
 
@@ -242,7 +272,10 @@ class PNDMSampler:
 
         # full formula (9)
         prev_sample = (
-            sample_coeff * sample - (alpha_prod_t_prev - alpha_prod_t) * model_output / model_output_denom_coeff
+            sample_coeff * sample
+            - (alpha_prod_t_prev - alpha_prod_t)
+            * model_output
+            / model_output_denom_coeff
         )
 
         return prev_sample
@@ -254,7 +287,9 @@ class PNDMSampler:
         timesteps: torch.IntTensor,
     ) -> torch.Tensor:
         # Make sure alphas_cumprod and timestep have same device and dtype as original_samples
-        self.alphas_cumprod = self.alphas_cumprod.to(device=original_samples.device, dtype=original_samples.dtype)
+        self.alphas_cumprod = self.alphas_cumprod.to(
+            device=original_samples.device, dtype=original_samples.dtype
+        )
         timesteps = timesteps.to(original_samples.device)
 
         sqrt_alpha_prod = self.alphas_cumprod[timesteps] ** 0.5
@@ -267,5 +302,7 @@ class PNDMSampler:
         while len(sqrt_one_minus_alpha_prod.shape) < len(original_samples.shape):
             sqrt_one_minus_alpha_prod = sqrt_one_minus_alpha_prod.unsqueeze(-1)
 
-        noisy_samples = sqrt_alpha_prod * original_samples + sqrt_one_minus_alpha_prod * noise
+        noisy_samples = (
+            sqrt_alpha_prod * original_samples + sqrt_one_minus_alpha_prod * noise
+        )
         return noisy_samples
