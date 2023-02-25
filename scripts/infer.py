@@ -9,9 +9,7 @@ from stable_diffusion_pytorch import (
 )
 from stable_diffusion_pytorch import util
 from stable_diffusion_pytorch.samplers import (
-    KLMSSampler,
-    KEulerSampler,
-    KEulerAncestralSampler,
+    PNDMSampler
 )
 import argparse
 from rich.progress import (
@@ -819,7 +817,7 @@ def sample(
     seed: int = 65536,
     num_denoising_steps: int = 50,
     cfg_scale: int = 7.5,
-    sampler: str = "k_lms",
+    sampler: str = "pndm",
     device="cuda",
     show_progress: bool = True,
 ):
@@ -897,18 +895,12 @@ def sample(
             context = text_encoder(tokens)  # [1, 77, 768]
         del tokenizer, text_encoder
 
-        if sampler == "k_lms":
-            sampler = KLMSSampler(num_inference_steps=num_denoising_steps, inference_mode=True)
-        elif sampler == "k_euler":
-            sampler = KEulerSampler(n_inference_steps=num_denoising_steps)
-        elif sampler == "k_euler_ancestral":
-            sampler = KEulerAncestralSampler(
-                n_inference_steps=num_denoising_steps, generator=generator
-            )
+        if sampler == "pndm":
+            sampler = PNDMSampler(num_inference_timesteps=num_denoising_steps)
         else:
             raise ValueError(
                 "Unknown sampler value %s. "
-                "Accepted values are {k_lms, k_euler, k_euler_ancestral}" % sampler
+                "Accepted values are {pndm}" % sampler
             )
 
         noise_shape = (len(prompts), 4, height // 8, width // 8)
@@ -940,18 +932,20 @@ def sample(
             del encoder, processed_input_images, input_images_tensor, latents_noise
         else:
             latents = torch.randn(noise_shape, generator=generator, device=device)
-            latents *= sampler.initial_scale
+            latents *= sampler.init_noise_sigma
 
         unet = models["unet"]
+
+        sampler.set_timesteps(num_denoising_steps)
 
         timesteps = progress.track(sampler.timesteps, description="Denoising...") if show_progress else sampler.timesteps
         for timestep in timesteps:
             time_embedding = util.get_time_embedding(
                 timestep, dtype=torch.float32, device=latents.device
             )
-            input_latents = sampler.scale_input_latent(latents)
+
             if use_cfg:
-                input_latents = input_latents.repeat(
+                input_latents = latents.repeat(
                     2, 1, 1, 1
                 )  # Use same Gaussian noise for both latents
 
@@ -962,7 +956,7 @@ def sample(
                 )  # output_uncond is a 'random' image from the distribution of realistic images
                 output = cfg_scale * (output_cond - output_uncond) + output_uncond
 
-            latents = sampler.step(latents, output)
+            latents = sampler.step(output, timestep, latents) # might be timestep instead
 
         del unet
 
@@ -971,7 +965,7 @@ def sample(
         del decoder
 
         images = util.rescale(images, (-1, 1), (0, 255), clamp=True)
-        # images = util.move_channel(images, to="last")
+        images = util.move_channel(images, to="last")
 
         return images.to("cpu", torch.uint8).numpy()
 
@@ -995,7 +989,7 @@ if __name__ == "__main__":
     parser.add_argument("--seed", type=int, default=65536)
     parser.add_argument("--num_denoising_steps", type=int, default=50)
     parser.add_argument("--cfg-scale", type=float, default=7.5)
-    parser.add_argument("--sampler", type=str, default="k_lms")
+    parser.add_argument("--sampler", type=str, default="pndm")
     parser.add_argument("--output-dir", type=str, default="samples")
 
     args = parser.parse_args()
