@@ -8,12 +8,14 @@ class TimeEmbedding(nn.Module):
     def __init__(self, n_embd):
         super().__init__()
         self.linear_1 = nn.Linear(n_embd, 4 * n_embd)
+        self.act = nn.SiLU()
         self.linear_2 = nn.Linear(4 * n_embd, 4 * n_embd)
 
     def forward(self, x):
         x = self.linear_1(x)
-        x = F.silu(x)
+        x = self.act(x)
         x = self.linear_2(x)
+
         return x
 
 
@@ -39,6 +41,7 @@ class ResidualBlock(nn.Module):
             )
 
     def forward(self, feature, time):
+
         residue = feature
 
         feature = self.groupnorm_feature(feature)
@@ -47,11 +50,14 @@ class ResidualBlock(nn.Module):
 
         time = F.silu(time)
         time = self.linear_time(time)
+        
 
         merged = feature + time.unsqueeze(-1).unsqueeze(-1)
         merged = self.groupnorm_merged(merged)
         merged = F.silu(merged)
         merged = self.conv_merged(merged)
+
+        test = merged + self.residual_layer(residue)
 
         return merged + self.residual_layer(residue)
 
@@ -61,7 +67,7 @@ class AttentionBlock(nn.Module):
         super().__init__()
         channels = n_head * n_embd
 
-        self.groupnorm = nn.GroupNorm(32, channels, eps=1e-6)
+        self.groupnorm = nn.GroupNorm(32, channels, eps=1e-6, affine=True)
         self.conv_input = nn.Conv2d(channels, channels, kernel_size=1, padding=0)
 
         self.layernorm_1 = nn.LayerNorm(channels)
@@ -80,6 +86,7 @@ class AttentionBlock(nn.Module):
         residue_long = x
 
         x = self.groupnorm(x)
+
         x = self.conv_input(x)
 
         n, c, h, w = x.shape

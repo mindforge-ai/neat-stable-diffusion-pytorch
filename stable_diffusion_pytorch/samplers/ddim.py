@@ -12,18 +12,17 @@ class DDIMSampler:
         self.num_inference_steps = num_inference_steps
         self.num_training_steps = num_training_steps
 
-        self.timesteps = torch.linspace(
-            num_training_steps - 1, 0, num_inference_steps, device=0, dtype=torch.long
-        )
+        step_ratio = num_training_steps // num_inference_steps
+        self.timesteps = torch.flip(torch.arange(0, num_inference_steps, dtype=torch.long), dims=[0]) * step_ratio
 
-        """ if steps_offset > 0:
-            self.timesteps = self.timesteps + steps_offset """
+        if steps_offset > 0:
+            self.timesteps = self.timesteps + steps_offset
 
         # Stable Diffusion has steps_offset 1, but implementing this causes an index error atm.
 
         # Stable Diffusion uses a `scaled_linear` schedule with beta_start 0.00085 and beta_end 0.012.
         self.betas = (
-            torch.linspace(0.00085**0.5, 0.012**0.5, num_training_steps, device=0) ** 2
+            torch.linspace(0.00085**0.5, 0.012**0.5, num_training_steps, dtype=torch.float32) ** 2
         )
 
         self.alphas = 1 - self.betas
@@ -76,8 +75,8 @@ class DDIMSampler:
 
         std_dev_t = 0 * torch.sqrt(variance) # 0 = eta ??
 
-        prev_sample_direction = torch.sqrt(1 - prev_alpha_prod_t - std_dev_t ** 2) * predicted_noise
+        pred_sample_direction = torch.sqrt(1 - prev_alpha_prod_t - std_dev_t ** 2) * predicted_noise
 
-        prev_sample = torch.sqrt(prev_alpha_prod_t) * pred_original_sample + prev_sample_direction
+        prev_sample = torch.sqrt(prev_alpha_prod_t) * pred_original_sample + pred_sample_direction
 
         return prev_sample

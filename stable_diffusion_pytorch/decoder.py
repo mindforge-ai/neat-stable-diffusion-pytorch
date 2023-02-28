@@ -3,6 +3,7 @@ from torch import nn
 from torch.nn import functional as F
 from .attention import SelfAttention, CLIPSelfAttention
 
+torch.set_printoptions(precision=20)
 
 class EncoderAttentionBlock(nn.Module):
     def __init__(self, channels):
@@ -65,6 +66,8 @@ class ResidualBlock(nn.Module):
     def forward(self, x):
         residue = x
 
+        print("before first resnet", x)
+
         x = self.groupnorm_1(x)
         x = F.silu(x)
         x = self.conv_1(x)
@@ -72,6 +75,9 @@ class ResidualBlock(nn.Module):
         x = self.groupnorm_2(x)
         x = F.silu(x)
         x = self.conv_2(x)
+
+        print("after first resnet", x + self.residual_layer(residue))
+        exit()
 
         return x + self.residual_layer(residue)
 
@@ -114,11 +120,12 @@ class Decoder(nn.Module):
 
     def forward(self, x):
         # without scaling the latents in the following line, the image turned out faded and 'sandy-translucent' like a desert
-        x /= 0.18215  # not sure if this comes before or after, but putting it before as it's 'post quant'
+        x /= 0.18215
         x = self.post_quant_conv(x)
 
         x = self.conv_in(x)
-        x = self.mid(x)
+        print("start of mid", x)
+        x = self.mid(x) # somewhere in mid, I believe in the first residualblock, the tensors are diverging... TODO: investigate.
 
         # this is a gross implemenation of CompVis/stable-diffusion's "backwards" decoder, for some reason it's implemented in reverse.
         x = self.up[-4](x)
@@ -139,6 +146,9 @@ class Decoder(nn.Module):
         x = self.up[-15](x)
         x = self.up[-14](x)
         x = self.up[-13](x)
+
+        print("before norm", x)
+        exit()
 
         x = self.norm_out(x)
         x = self.silu(x)

@@ -1,14 +1,45 @@
 import torch
 import numpy as np
 import os
+import math
 
 
 def get_time_embedding(timestep, dtype, device):
-    freqs = torch.pow(
+    """ freqs = torch.pow(
         10000, -torch.arange(start=0, end=160, dtype=dtype, device=device) / 160
     )
-    x = torch.tensor([timestep], dtype=dtype, device=device)[:, None] * freqs[None]
-    return torch.cat([torch.cos(x), torch.sin(x)], dim=-1)
+    x = torch.tensor([timestep], dtype=dtype, device=device)[:, None] * freqs[None] """
+
+    timestep = timestep.unsqueeze(0).to(device)
+
+    embedding_dim = 320
+    max_period = 10000
+    downscale_freq_shift = 0
+    scale = 1
+
+    half_dim = embedding_dim // 2
+    exponent = -math.log(max_period) * torch.arange(
+        start=0, end=half_dim, dtype=dtype, device=device
+    )
+    exponent = exponent / (half_dim - downscale_freq_shift)
+
+    emb = torch.exp(exponent)
+    emb = timestep[:, None].float() * emb[None, :]
+
+    # scale embeddings
+    emb = scale * emb
+
+    # concat sine and cosine embeddings
+    emb = torch.cat([torch.sin(emb), torch.cos(emb)], dim=-1)
+
+    # flip sine and cosine embeddings
+    emb = torch.cat([emb[:, half_dim:], emb[:, :half_dim]], dim=-1)
+
+    # zero pad
+    if embedding_dim % 2 == 1:
+        emb = torch.nn.functional.pad(emb, (0, 1, 0, 0))
+
+    return emb
 
 
 def get_alphas_cumprod(beta_start=0.00085, beta_end=0.012, num_steps=1000):

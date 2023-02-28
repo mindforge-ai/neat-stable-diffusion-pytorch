@@ -22,10 +22,7 @@ from PIL import Image
 from pathlib import Path
 import numpy as np
 from contextlib import nullcontext
-
-torch.set_printoptions(precision=20)
-np.set_printoptions(precision=20)
-
+import random
 
 original_keys = {
     # CLIPTextEncoder weights
@@ -875,6 +872,9 @@ def sample(
         if height % 8 or width % 8:
             raise ValueError("height and width must be a multiple of 8")
 
+        torch.manual_seed(seed)
+        np.random.seed(seed)
+        random.seed(seed)
         generator = torch.Generator(device=device).manual_seed(seed)
 
         tokenizer = Tokenizer()
@@ -932,7 +932,6 @@ def sample(
             # So we can use pure noise as input to the UNET, simulating the existence of 'an underlying image' which has been corrupted by pure noise.
             # The trick: that 'underlying image' doesn't exist and we're creating the image out of thin air.
             latents = torch.randn(noise_shape, generator=generator, device=device)
-            # latents *= sampler.init_noise_sigma
 
         unet = models["unet"]
 
@@ -942,6 +941,7 @@ def sample(
             else sampler.timesteps
         )
         for timestep in timesteps:
+
             time_embedding = util.get_time_embedding(
                 timestep, dtype=torch.float32, device=latents.device
             )
@@ -950,8 +950,11 @@ def sample(
                 input_latents = latents.repeat(
                     2, 1, 1, 1
                 )  # Use same Gaussian noise for both latents
+            else:
+                input_latents = latents
 
             output = unet(input_latents, context, time_embedding)
+
             if use_cfg:
                 output_cond, output_uncond = output.chunk(
                     2
@@ -960,11 +963,13 @@ def sample(
 
             latents = sampler.reverse_sample(
                 output, timestep, latents
-            )  # might be timestep instead
+            )
+
 
         del unet
 
         decoder = models["decoder"]
+
         images = decoder(latents)
         del decoder
 
