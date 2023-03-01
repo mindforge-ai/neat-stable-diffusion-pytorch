@@ -1,7 +1,8 @@
+import math
+
 import torch
 from torch import nn
 from torch.nn import functional as F
-import math
 
 
 class CLIPSelfAttention(nn.Module):
@@ -27,16 +28,17 @@ class CLIPSelfAttention(nn.Module):
         k = k.view(interim_shape).transpose(1, 2)
         v = v.view(interim_shape).transpose(1, 2)
 
-        weight = q @ k.transpose(-1, -2)
+        weight = (q @ k.transpose(-1, -2)) * 1 / math.sqrt(self.d_head)
+
         if causal_mask:
             mask = torch.ones_like(weight, dtype=torch.bool).triu(1)
             weight.masked_fill_(mask, -torch.inf)
-        weight /= math.sqrt(self.d_head)
         weight = F.softmax(weight, dim=-1)
 
         output = weight @ v
         output = output.transpose(1, 2)
         output = output.reshape(input_shape)
+
         output = self.out_proj(output)
         return output
 

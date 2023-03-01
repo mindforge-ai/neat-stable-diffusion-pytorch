@@ -1,14 +1,14 @@
 import torch
 from torch import nn
 from torch.nn import functional as F
-from .attention import SelfAttention, CLIPSelfAttention
 
-torch.set_printoptions(precision=20)
+from .attention import CLIPSelfAttention, SelfAttention
+
 
 class EncoderAttentionBlock(nn.Module):
     def __init__(self, channels):
         super().__init__()
-        self.groupnorm = nn.GroupNorm(32, channels)
+        self.groupnorm = nn.GroupNorm(32, channels, eps=1e-6, affine=True)
         self.self_attention = CLIPSelfAttention(1, channels)
 
     def forward(self, x):
@@ -23,6 +23,7 @@ class EncoderAttentionBlock(nn.Module):
         x = x.view((n, c, h, w))
 
         x += residue
+
         return x
 
 
@@ -50,10 +51,10 @@ class AttentionBlock(nn.Module):
 class ResidualBlock(nn.Module):
     def __init__(self, in_channels, out_channels):
         super().__init__()
-        self.groupnorm_1 = nn.GroupNorm(32, in_channels)
+        self.groupnorm_1 = nn.GroupNorm(32, in_channels, eps=1e-6, affine=True)
         self.conv_1 = nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1)
 
-        self.groupnorm_2 = nn.GroupNorm(32, out_channels)
+        self.groupnorm_2 = nn.GroupNorm(32, out_channels, eps=1e-6, affine=True)
         self.conv_2 = nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1)
 
         if in_channels == out_channels:
@@ -66,8 +67,6 @@ class ResidualBlock(nn.Module):
     def forward(self, x):
         residue = x
 
-        print("before first resnet", x)
-
         x = self.groupnorm_1(x)
         x = F.silu(x)
         x = self.conv_1(x)
@@ -75,9 +74,6 @@ class ResidualBlock(nn.Module):
         x = self.groupnorm_2(x)
         x = F.silu(x)
         x = self.conv_2(x)
-
-        print("after first resnet", x + self.residual_layer(residue))
-        exit()
 
         return x + self.residual_layer(residue)
 
@@ -114,7 +110,7 @@ class Decoder(nn.Module):
                 nn.Conv2d(512, 512, kernel_size=3, padding=1),
             ]
         )
-        self.norm_out = nn.GroupNorm(32, 128)
+        self.norm_out = nn.GroupNorm(32, 128, eps=1e-6)
         self.silu = nn.SiLU()
         self.unknown_conv = nn.Conv2d(128, 3, kernel_size=3, padding=1)
 
@@ -124,8 +120,7 @@ class Decoder(nn.Module):
         x = self.post_quant_conv(x)
 
         x = self.conv_in(x)
-        print("start of mid", x)
-        x = self.mid(x) # somewhere in mid, I believe in the first residualblock, the tensors are diverging... TODO: investigate.
+        x = self.mid(x)
 
         # this is a gross implemenation of CompVis/stable-diffusion's "backwards" decoder, for some reason it's implemented in reverse.
         x = self.up[-4](x)
@@ -147,12 +142,11 @@ class Decoder(nn.Module):
         x = self.up[-14](x)
         x = self.up[-13](x)
 
-        print("before norm", x)
-        exit()
-
         x = self.norm_out(x)
         x = self.silu(x)
         x = self.unknown_conv(x)
+
+
         return x
 
 
