@@ -1,6 +1,6 @@
-from .tokenizer import Tokenizer
-from .clip import CLIP
-from .encoder import Encoder
+from .clip import CLIPTextEncoder
 from .decoder import Decoder, LegacyDecoder
 from .diffusion import Diffusion
-from .samplers import PNDMSampler, DDPMSampler, DDIMSampler
+from .encoder import Encoder
+from .samplers import DDIMSampler, DDPMSampler, PNDMSampler
+from .tokenizer import Tokenizer

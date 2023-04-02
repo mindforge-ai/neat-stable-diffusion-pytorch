@@ -2,26 +2,20 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
-from .attention import CLIPSelfAttention, SelfAttention
+from .attention import SelfAttention, EncoderSelfAttention
 
 
 class EncoderAttentionBlock(nn.Module):
     def __init__(self, channels):
         super().__init__()
         self.groupnorm = nn.GroupNorm(32, channels, eps=1e-6, affine=True)
-        self.self_attention = CLIPSelfAttention(1, channels)
+        self.self_attention = EncoderSelfAttention(1, channels)
 
     def forward(self, x):
+
         residue = x
         x = self.groupnorm(x)
-
-        n, c, h, w = x.shape
-        x = x.view((n, c, h * w))
-        x = x.transpose(-1, -2)
         x = self.self_attention(x)
-        x = x.transpose(-1, -2)
-        x = x.view((n, c, h, w))
-
         x += residue
 
         return x
@@ -68,11 +62,11 @@ class ResidualBlock(nn.Module):
         residue = x
 
         x = self.groupnorm_1(x)
-        x = F.silu(x)
+        x = x * torch.sigmoid(x)
         x = self.conv_1(x)
 
         x = self.groupnorm_2(x)
-        x = F.silu(x)
+        x = x * torch.sigmoid(x)
         x = self.conv_2(x)
 
         return x + self.residual_layer(residue)
@@ -120,6 +114,7 @@ class Decoder(nn.Module):
         x = self.post_quant_conv(x)
 
         x = self.conv_in(x)
+
         x = self.mid(x)
 
         # this is a gross implemenation of CompVis/stable-diffusion's "backwards" decoder, for some reason it's implemented in reverse.
@@ -143,9 +138,10 @@ class Decoder(nn.Module):
         x = self.up[-13](x)
 
         x = self.norm_out(x)
-        x = self.silu(x)
-        x = self.unknown_conv(x)
 
+        x = x * torch.sigmoid(x) # This is Swish (slightly different to SILU)
+
+        x = self.unknown_conv(x)
 
         return x
 

@@ -1,28 +1,30 @@
-import torch
-from stable_diffusion_pytorch import (
-    Tokenizer,
-    CLIP,
-    Encoder,
-    Decoder,
-    Diffusion,
-    LegacyDecoder,
-)
-from stable_diffusion_pytorch import util
-from stable_diffusion_pytorch.samplers import DDIMSampler
 import argparse
+import random
+from contextlib import nullcontext
+from pathlib import Path
+
+import numpy as np
+import torch
+from PIL import Image
 from rich.progress import (
-    Progress,
     BarColumn,
+    MofNCompleteColumn,
+    Progress,
     TextColumn,
     TimeElapsedColumn,
     TimeRemainingColumn,
-    MofNCompleteColumn,
 )
-from PIL import Image
-from pathlib import Path
-import numpy as np
-from contextlib import nullcontext
-import random
+from stable_diffusion_pytorch import (
+    CLIPTextEncoder,
+    Decoder,
+    Diffusion,
+    Encoder,
+    LegacyDecoder,
+    Tokenizer,
+    util,
+)
+from stable_diffusion_pytorch.samplers import DDIMSampler, NumpyDDIMSampler
+from einops import rearrange
 
 original_keys = {
     # CLIPTextEncoder weights
@@ -66,22 +68,22 @@ original_keys = {
 for i in range(12):
     original_keys[
         f"cond_stage_model.transformer.text_model.encoder.layers.{i}.self_attn.k_proj.weight"
-    ] = f"stack.{i}.self_attention.k_proj.weight"
+    ] = f"stack.{i}.self_attention.to_key.weight"
     original_keys[
         f"cond_stage_model.transformer.text_model.encoder.layers.{i}.self_attn.k_proj.bias"
-    ] = f"stack.{i}.self_attention.k_proj.bias"
+    ] = f"stack.{i}.self_attention.to_key.bias"
     original_keys[
         f"cond_stage_model.transformer.text_model.encoder.layers.{i}.self_attn.v_proj.weight"
-    ] = f"stack.{i}.self_attention.v_proj.weight"
+    ] = f"stack.{i}.self_attention.to_value.weight"
     original_keys[
         f"cond_stage_model.transformer.text_model.encoder.layers.{i}.self_attn.v_proj.bias"
-    ] = f"stack.{i}.self_attention.v_proj.bias"
+    ] = f"stack.{i}.self_attention.to_value.bias"
     original_keys[
         f"cond_stage_model.transformer.text_model.encoder.layers.{i}.self_attn.q_proj.weight"
-    ] = f"stack.{i}.self_attention.q_proj.weight"
+    ] = f"stack.{i}.self_attention.to_query.weight"
     original_keys[
         f"cond_stage_model.transformer.text_model.encoder.layers.{i}.self_attn.q_proj.bias"
-    ] = f"stack.{i}.self_attention.q_proj.bias"
+    ] = f"stack.{i}.self_attention.to_query.bias"
     original_keys[
         f"cond_stage_model.transformer.text_model.encoder.layers.{i}.self_attn.out_proj.weight"
     ] = f"stack.{i}.self_attention.out_proj.weight"
@@ -215,22 +217,22 @@ original_keys[
 ] = f"mid.1.groupnorm.bias"
 original_keys[
     f"first_stage_model.encoder.mid.attn_1.q.weight"
-] = f"mid.1.self_attention.q_proj.weight"
+] = f"mid.1.self_attention.to_query.weight"
 original_keys[
     f"first_stage_model.encoder.mid.attn_1.q.bias"
-] = f"mid.1.self_attention.q_proj.bias"
+] = f"mid.1.self_attention.to_query.bias"
 original_keys[
     f"first_stage_model.encoder.mid.attn_1.k.weight"
-] = f"mid.1.self_attention.k_proj.weight"
+] = f"mid.1.self_attention.to_key.weight"
 original_keys[
     f"first_stage_model.encoder.mid.attn_1.k.bias"
-] = f"mid.1.self_attention.k_proj.bias"
+] = f"mid.1.self_attention.to_key.bias"
 original_keys[
     f"first_stage_model.encoder.mid.attn_1.v.weight"
-] = f"mid.1.self_attention.v_proj.weight"
+] = f"mid.1.self_attention.to_value.weight"
 original_keys[
     f"first_stage_model.encoder.mid.attn_1.v.bias"
-] = f"mid.1.self_attention.v_proj.bias"
+] = f"mid.1.self_attention.to_value.bias"
 original_keys[
     f"first_stage_model.encoder.mid.attn_1.proj_out.weight"
 ] = f"mid.1.self_attention.out_proj.weight"
@@ -297,22 +299,22 @@ original_keys[
 ] = f"mid.1.groupnorm.bias"
 original_keys[
     f"first_stage_model.decoder.mid.attn_1.q.weight"
-] = f"mid.1.self_attention.q_proj.weight"
+] = f"mid.1.self_attention.to_query.weight"
 original_keys[
     f"first_stage_model.decoder.mid.attn_1.q.bias"
-] = f"mid.1.self_attention.q_proj.bias"
+] = f"mid.1.self_attention.to_query.bias"
 original_keys[
     f"first_stage_model.decoder.mid.attn_1.k.weight"
-] = f"mid.1.self_attention.k_proj.weight"
+] = f"mid.1.self_attention.to_key.weight"
 original_keys[
     f"first_stage_model.decoder.mid.attn_1.k.bias"
-] = f"mid.1.self_attention.k_proj.bias"
+] = f"mid.1.self_attention.to_key.bias"
 original_keys[
     f"first_stage_model.decoder.mid.attn_1.v.weight"
-] = f"mid.1.self_attention.v_proj.weight"
+] = f"mid.1.self_attention.to_value.weight"
 original_keys[
     f"first_stage_model.decoder.mid.attn_1.v.bias"
-] = f"mid.1.self_attention.v_proj.bias"
+] = f"mid.1.self_attention.to_value.bias"
 original_keys[
     f"first_stage_model.decoder.mid.attn_1.proj_out.weight"
 ] = f"mid.1.self_attention.out_proj.weight"
@@ -420,13 +422,13 @@ for outer_i in range(1, 12):
         ] = f"unet.encoders.{outer_i}.1.layernorm_1.bias"
         original_keys[
             f"model.diffusion_model.input_blocks.{outer_i}.1.transformer_blocks.0.attn1.to_q.weight"
-        ] = f"unet.encoders.{outer_i}.1.attention_1.q_proj.weight"
+        ] = f"unet.encoders.{outer_i}.1.attention_1.to_query.weight"
         original_keys[
             f"model.diffusion_model.input_blocks.{outer_i}.1.transformer_blocks.0.attn1.to_k.weight"
-        ] = f"unet.encoders.{outer_i}.1.attention_1.k_proj.weight"
+        ] = f"unet.encoders.{outer_i}.1.attention_1.to_key.weight"
         original_keys[
             f"model.diffusion_model.input_blocks.{outer_i}.1.transformer_blocks.0.attn1.to_v.weight"
-        ] = f"unet.encoders.{outer_i}.1.attention_1.v_proj.weight"
+        ] = f"unet.encoders.{outer_i}.1.attention_1.to_value.weight"
         original_keys[
             f"model.diffusion_model.input_blocks.{outer_i}.1.transformer_blocks.0.attn1.to_out.0.weight"
         ] = f"unet.encoders.{outer_i}.1.attention_1.out_proj.weight"
@@ -441,13 +443,13 @@ for outer_i in range(1, 12):
         ] = f"unet.encoders.{outer_i}.1.layernorm_2.bias"
         original_keys[
             f"model.diffusion_model.input_blocks.{outer_i}.1.transformer_blocks.0.attn2.to_q.weight"
-        ] = f"unet.encoders.{outer_i}.1.attention_2.q_proj.weight"
+        ] = f"unet.encoders.{outer_i}.1.attention_2.to_query.weight"
         original_keys[
             f"model.diffusion_model.input_blocks.{outer_i}.1.transformer_blocks.0.attn2.to_k.weight"
-        ] = f"unet.encoders.{outer_i}.1.attention_2.k_proj.weight"
+        ] = f"unet.encoders.{outer_i}.1.attention_2.to_key.weight"
         original_keys[
             f"model.diffusion_model.input_blocks.{outer_i}.1.transformer_blocks.0.attn2.to_v.weight"
-        ] = f"unet.encoders.{outer_i}.1.attention_2.v_proj.weight"
+        ] = f"unet.encoders.{outer_i}.1.attention_2.to_value.weight"
         original_keys[
             f"model.diffusion_model.input_blocks.{outer_i}.1.transformer_blocks.0.attn2.to_out.0.weight"
         ] = f"unet.encoders.{outer_i}.1.attention_2.out_proj.weight"
@@ -548,13 +550,13 @@ for outer_i in range(3):
         ] = f"unet.bottleneck.{outer_i}.layernorm_1.bias"
         original_keys[
             f"model.diffusion_model.middle_block.{outer_i}.transformer_blocks.0.attn1.to_q.weight"
-        ] = f"unet.bottleneck.{outer_i}.attention_1.q_proj.weight"
+        ] = f"unet.bottleneck.{outer_i}.attention_1.to_query.weight"
         original_keys[
             f"model.diffusion_model.middle_block.{outer_i}.transformer_blocks.0.attn1.to_k.weight"
-        ] = f"unet.bottleneck.{outer_i}.attention_1.k_proj.weight"
+        ] = f"unet.bottleneck.{outer_i}.attention_1.to_key.weight"
         original_keys[
             f"model.diffusion_model.middle_block.{outer_i}.transformer_blocks.0.attn1.to_v.weight"
-        ] = f"unet.bottleneck.{outer_i}.attention_1.v_proj.weight"
+        ] = f"unet.bottleneck.{outer_i}.attention_1.to_value.weight"
         original_keys[
             f"model.diffusion_model.middle_block.{outer_i}.transformer_blocks.0.attn1.to_out.0.weight"
         ] = f"unet.bottleneck.{outer_i}.attention_1.out_proj.weight"
@@ -569,13 +571,13 @@ for outer_i in range(3):
         ] = f"unet.bottleneck.{outer_i}.layernorm_2.bias"
         original_keys[
             f"model.diffusion_model.middle_block.{outer_i}.transformer_blocks.0.attn2.to_q.weight"
-        ] = f"unet.bottleneck.{outer_i}.attention_2.q_proj.weight"
+        ] = f"unet.bottleneck.{outer_i}.attention_2.to_query.weight"
         original_keys[
             f"model.diffusion_model.middle_block.{outer_i}.transformer_blocks.0.attn2.to_k.weight"
-        ] = f"unet.bottleneck.{outer_i}.attention_2.k_proj.weight"
+        ] = f"unet.bottleneck.{outer_i}.attention_2.to_key.weight"
         original_keys[
             f"model.diffusion_model.middle_block.{outer_i}.transformer_blocks.0.attn2.to_v.weight"
-        ] = f"unet.bottleneck.{outer_i}.attention_2.v_proj.weight"
+        ] = f"unet.bottleneck.{outer_i}.attention_2.to_value.weight"
         original_keys[
             f"model.diffusion_model.middle_block.{outer_i}.transformer_blocks.0.attn2.to_out.0.weight"
         ] = f"unet.bottleneck.{outer_i}.attention_2.out_proj.weight"
@@ -660,13 +662,13 @@ for outer_i in range(12):
         ] = f"unet.decoders.{outer_i}.1.layernorm_1.bias"
         original_keys[
             f"model.diffusion_model.output_blocks.{outer_i}.1.transformer_blocks.0.attn1.to_q.weight"
-        ] = f"unet.decoders.{outer_i}.1.attention_1.q_proj.weight"
+        ] = f"unet.decoders.{outer_i}.1.attention_1.to_query.weight"
         original_keys[
             f"model.diffusion_model.output_blocks.{outer_i}.1.transformer_blocks.0.attn1.to_k.weight"
-        ] = f"unet.decoders.{outer_i}.1.attention_1.k_proj.weight"
+        ] = f"unet.decoders.{outer_i}.1.attention_1.to_key.weight"
         original_keys[
             f"model.diffusion_model.output_blocks.{outer_i}.1.transformer_blocks.0.attn1.to_v.weight"
-        ] = f"unet.decoders.{outer_i}.1.attention_1.v_proj.weight"
+        ] = f"unet.decoders.{outer_i}.1.attention_1.to_value.weight"
         original_keys[
             f"model.diffusion_model.output_blocks.{outer_i}.1.transformer_blocks.0.attn1.to_out.0.weight"
         ] = f"unet.decoders.{outer_i}.1.attention_1.out_proj.weight"
@@ -681,13 +683,13 @@ for outer_i in range(12):
         ] = f"unet.decoders.{outer_i}.1.layernorm_2.bias"
         original_keys[
             f"model.diffusion_model.output_blocks.{outer_i}.1.transformer_blocks.0.attn2.to_q.weight"
-        ] = f"unet.decoders.{outer_i}.1.attention_2.q_proj.weight"
+        ] = f"unet.decoders.{outer_i}.1.attention_2.to_query.weight"
         original_keys[
             f"model.diffusion_model.output_blocks.{outer_i}.1.transformer_blocks.0.attn2.to_k.weight"
-        ] = f"unet.decoders.{outer_i}.1.attention_2.k_proj.weight"
+        ] = f"unet.decoders.{outer_i}.1.attention_2.to_key.weight"
         original_keys[
             f"model.diffusion_model.output_blocks.{outer_i}.1.transformer_blocks.0.attn2.to_v.weight"
-        ] = f"unet.decoders.{outer_i}.1.attention_2.v_proj.weight"
+        ] = f"unet.decoders.{outer_i}.1.attention_2.to_value.weight"
         original_keys[
             f"model.diffusion_model.output_blocks.{outer_i}.1.transformer_blocks.0.attn2.to_out.0.weight"
         ] = f"unet.decoders.{outer_i}.1.attention_2.out_proj.weight"
@@ -739,6 +741,9 @@ for outer_i in range(12):
         f"model.diffusion_model.output_blocks.{outer_i}.0.skip_connection.bias"
     ] = f"unet.decoders.{outer_i}.0.residual_layer.bias"
 
+torch.set_printoptions(precision=20)
+np.set_printoptions(precision=20)
+
 
 def make_compatible(state_dict):
     keys = list(state_dict.keys())
@@ -760,14 +765,16 @@ def make_compatible(state_dict):
         elif key in original_keys.keys():
             new_key = original_keys[key]
             state_dict[new_key] = state_dict[key]
-            if new_key in [
-                "mid.1.self_attention.q_proj.weight",
-                "mid.1.self_attention.k_proj.weight",
-                "mid.1.self_attention.v_proj.weight",
+            """ if new_key in [
+                "mid.1.self_attention.to_query.weight",
+                "mid.1.self_attention.to_key.weight",
+                "mid.1.self_attention.to_value.weight",
                 "mid.1.self_attention.out_proj.weight",
             ]:
                 state_dict[new_key] = state_dict[new_key].squeeze()
                 changed = True
+            this code is useful if you are using nn.Linear. if you are using Conv2D like original implementation then skip it
+                """ 
             del state_dict[key]
             del original_keys[key]
             changed = True
@@ -788,14 +795,14 @@ def make_compatible(state_dict):
 def load_model(module, weights_path, device):
     model = module().to(device)
     state_dict = torch.load(weights_path)
-    # state_dict = make_compatible(state_dict)
+    state_dict = make_compatible(state_dict)
     model.load_state_dict(state_dict)
     return model
 
 
 def preload_models(device):
     return {
-        "text_encoder": load_model(CLIP, "data/ckpt/clip.pt", device),
+        "text_encoder": load_model(CLIPTextEncoder, "data/ckpt/clip.pt", device),
         "encoder": load_model(Encoder, "data/ckpt/encoder.pt", device),
         "decoder": load_model(Decoder, "data/ckpt/decoder.pt", device),
         "unet": load_model(Diffusion, "data/ckpt/unet.pt", device),
@@ -847,6 +854,7 @@ def sample(
         use_cfg = True
 
     with torch.inference_mode(), progress if show_progress else nullcontext():
+
         if not isinstance(prompts, (list, tuple)) or not prompts:
             raise ValueError("prompts must be a non-empty list or tuple")
 
@@ -878,6 +886,7 @@ def sample(
         generator = torch.Generator(device=device).manual_seed(seed)
 
         tokenizer = Tokenizer()
+
         text_encoder = models["text_encoder"]
         if use_cfg:
             cond_tokens = tokenizer.encode_batch(prompts)
@@ -894,7 +903,7 @@ def sample(
         del tokenizer, text_encoder
 
         if sampler == "ddim":
-            sampler = DDIMSampler(num_inference_steps=num_inference_steps)
+            sampler = NumpyDDIMSampler(num_inference_steps=num_inference_steps)
         else:
             raise ValueError(
                 "Unknown sampler value %s. " "Accepted values are {ddim}" % sampler
@@ -944,7 +953,7 @@ def sample(
 
             time_embedding = util.get_time_embedding(
                 timestep, dtype=torch.float32, device=latents.device
-            )
+            )  # corresponds to t_emb
 
             if use_cfg:
                 input_latents = latents.repeat(
@@ -961,20 +970,30 @@ def sample(
                 )  # output_uncond is a 'random' image from the distribution of realistic images
                 output = cfg_scale * (output_cond - output_uncond) + output_uncond
 
-            latents = sampler.reverse_sample(
-                output, timestep, latents
-            )
-
+            latents = sampler.reverse_sample(output, timestep, latents)
 
         del unet
 
         decoder = models["decoder"]
 
         images = decoder(latents)
+
         del decoder
 
-        images = util.rescale(images, (-1, 1), (0, 255), clamp=True)
-        images = util.move_channel(images, to="last")
+        images = torch.clamp(
+                            (images + 1.0) / 2.0, min=0.0, max=1.0
+                        )
+        images = (
+            images.cpu().permute(0, 2, 3, 1).numpy()
+        )
+
+        images = torch.from_numpy(
+            images
+        ).permute(0, 3, 1, 2)
+
+        images = 255.0 * rearrange(
+            images, "b c h w -> b h w c"
+        )
 
         return images.to("cpu", torch.uint8).numpy()
 

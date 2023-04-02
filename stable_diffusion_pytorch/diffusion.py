@@ -1,7 +1,8 @@
 import torch
 from torch import nn
 from torch.nn import functional as F
-from .attention import SelfAttention, CrossAttention, CLIPSelfAttention
+
+from .attention import CrossAttention, SelfAttention, EinsumSelfAttention
 
 
 class TimeEmbedding(nn.Module):
@@ -50,14 +51,11 @@ class ResidualBlock(nn.Module):
 
         time = F.silu(time)
         time = self.linear_time(time)
-        
 
         merged = feature + time.unsqueeze(-1).unsqueeze(-1)
         merged = self.groupnorm_merged(merged)
         merged = F.silu(merged)
         merged = self.conv_merged(merged)
-
-        test = merged + self.residual_layer(residue)
 
         return merged + self.residual_layer(residue)
 
@@ -71,7 +69,7 @@ class AttentionBlock(nn.Module):
         self.conv_input = nn.Conv2d(channels, channels, kernel_size=1, padding=0)
 
         self.layernorm_1 = nn.LayerNorm(channels)
-        self.attention_1 = CLIPSelfAttention(n_head, channels, in_proj_bias=False)
+        self.attention_1 = EinsumSelfAttention(n_head, channels, in_proj_bias=False)
         self.layernorm_2 = nn.LayerNorm(channels)
         self.attention_2 = CrossAttention(
             n_head, channels, d_context, in_proj_bias=False
@@ -113,7 +111,9 @@ class AttentionBlock(nn.Module):
         x = x.transpose(-1, -2)  # (n, c, hw)
         x = x.view((n, c, h, w))  # (n, c, h, w)
 
-        return self.conv_output(x) + residue_long
+        x = self.conv_output(x) + residue_long
+
+        return x
 
 
 class Upsample(nn.Module):
@@ -190,6 +190,7 @@ class UNet(nn.Module):
         )
 
     def forward(self, x, context, time):
+
         skip_connections = []
         for layers in self.encoders:
             x = layers(x, context, time)

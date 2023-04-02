@@ -5,41 +5,25 @@ import math
 
 
 def get_time_embedding(timestep, dtype, device):
-    """ freqs = torch.pow(
-        10000, -torch.arange(start=0, end=160, dtype=dtype, device=device) / 160
+    half = 320 // 2
+    freqs = torch.exp(
+        -math.log(10000)
+        * torch.arange(
+            start=0, end=half, dtype=torch.float32
+        )  # for some reason, fp32 is enforced here
+        / half
+    ).to(
+        device=device
+    )  # results diverge to CompVis if the above calculation is done on GPU
+    args = (
+        torch.tensor([timestep], dtype=dtype, device=device)[:, None].float()
+        * freqs[None]
     )
-    x = torch.tensor([timestep], dtype=dtype, device=device)[:, None] * freqs[None] """
+    embedding = torch.cat([torch.cos(args), torch.sin(args)], dim=-1)
+    if 320 % 2:
+        embedding = torch.cat([embedding, torch.zeros_like(embedding[:, :1])], dim=-1)
 
-    timestep = timestep.unsqueeze(0).to(device)
-
-    embedding_dim = 320
-    max_period = 10000
-    downscale_freq_shift = 0
-    scale = 1
-
-    half_dim = embedding_dim // 2
-    exponent = -math.log(max_period) * torch.arange(
-        start=0, end=half_dim, dtype=dtype, device=device
-    )
-    exponent = exponent / (half_dim - downscale_freq_shift)
-
-    emb = torch.exp(exponent)
-    emb = timestep[:, None].float() * emb[None, :]
-
-    # scale embeddings
-    emb = scale * emb
-
-    # concat sine and cosine embeddings
-    emb = torch.cat([torch.sin(emb), torch.cos(emb)], dim=-1)
-
-    # flip sine and cosine embeddings
-    emb = torch.cat([emb[:, half_dim:], emb[:, :half_dim]], dim=-1)
-
-    # zero pad
-    if embedding_dim % 2 == 1:
-        emb = torch.nn.functional.pad(emb, (0, 1, 0, 0))
-
-    return emb
+    return embedding
 
 
 def get_alphas_cumprod(beta_start=0.00085, beta_end=0.012, num_steps=1000):
