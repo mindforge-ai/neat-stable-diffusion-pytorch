@@ -27,7 +27,9 @@ class SelfAttention(nn.Module):
     def forward(self, x: torch.Tensor, causal_mask: bool = False) -> torch.Tensor:
         batch_size, sequence_length, _ = input_size = x.size()
 
-        query, key, value = self.to_query(x), self.to_key(x), self.to_value(x)
+        query = self.to_query(x) / math.sqrt(self.embedding_dim_per_head) if self.scale else self.to_query(x)
+        key = self.to_key(x)
+        value = self.to_value(x)
 
         split_into_heads_shape = (
             batch_size,
@@ -45,9 +47,6 @@ class SelfAttention(nn.Module):
         if causal_mask:
             mask = torch.ones_like(scores, dtype=torch.bool).triu(1)
             scores.masked_fill_(mask, -torch.inf)
-
-        if self.scale:
-            scores = scores / math.sqrt(self.embedding_dim)
 
         softmaxed_scores = F.softmax(scores, dim=-1)
 
@@ -151,7 +150,7 @@ class EinsumSelfAttention(nn.Module):
         key = key.view(split_into_heads_shape).transpose(1, 2)
         value = value.view(split_into_heads_shape).transpose(1, 2)
 
-        scores = einsum("b i d, b j d -> b i j", query.squeeze(0), key.squeeze(0))
+        scores = einsum("n b i d, n b j d -> n b i j", query, key)
 
         if causal_mask:
             mask = torch.ones_like(scores, dtype=torch.bool).triu(1)

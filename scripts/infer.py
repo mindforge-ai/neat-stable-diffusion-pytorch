@@ -1,31 +1,3 @@
-import argparse
-import random
-from contextlib import nullcontext
-from pathlib import Path
-
-import numpy as np
-import torch
-from PIL import Image
-from rich.progress import (
-    BarColumn,
-    MofNCompleteColumn,
-    Progress,
-    TextColumn,
-    TimeElapsedColumn,
-    TimeRemainingColumn,
-)
-from stable_diffusion_pytorch import (
-    CLIPTextEncoder,
-    Decoder,
-    Diffusion,
-    Encoder,
-    LegacyDecoder,
-    Tokenizer,
-    util,
-)
-from stable_diffusion_pytorch.samplers import DDIMSampler, NumpyDDIMSampler
-from einops import rearrange
-
 original_keys = {
     # CLIPTextEncoder weights
     "cond_stage_model.transformer.text_model.embeddings.position_ids": "embedding.position_indices",
@@ -741,6 +713,35 @@ for outer_i in range(12):
         f"model.diffusion_model.output_blocks.{outer_i}.0.skip_connection.bias"
     ] = f"unet.decoders.{outer_i}.0.residual_layer.bias"
 
+
+import argparse
+import random
+from contextlib import nullcontext
+from pathlib import Path
+
+import numpy as np
+import torch
+from PIL import Image
+from rich.progress import (
+    BarColumn,
+    MofNCompleteColumn,
+    Progress,
+    TextColumn,
+    TimeElapsedColumn,
+    TimeRemainingColumn,
+)
+from stable_diffusion_pytorch import (
+    CLIPTextEncoder,
+    Decoder,
+    Diffusion,
+    Encoder,
+    LegacyDecoder,
+    Tokenizer,
+    util,
+)
+from stable_diffusion_pytorch.samplers import DDIMSampler, NumpyDDIMSampler
+from einops import rearrange
+
 torch.set_printoptions(precision=20)
 np.set_printoptions(precision=20)
 
@@ -774,7 +775,7 @@ def make_compatible(state_dict):
                 state_dict[new_key] = state_dict[new_key].squeeze()
                 changed = True
             this code is useful if you are using nn.Linear. if you are using Conv2D like original implementation then skip it
-                """ 
+                """
             del state_dict[key]
             del original_keys[key]
             changed = True
@@ -795,8 +796,9 @@ def make_compatible(state_dict):
 def load_model(module, weights_path, device):
     model = module().to(device)
     state_dict = torch.load(weights_path)
-    state_dict = make_compatible(state_dict)
+    # state_dict = make_compatible(state_dict)
     model.load_state_dict(state_dict)
+    # torch.save(model.state_dict(), weights_path)
     return model
 
 
@@ -853,7 +855,7 @@ def sample(
     else:
         use_cfg = True
 
-    with torch.inference_mode(), progress if show_progress else nullcontext():
+    with progress if show_progress else nullcontext():
 
         if not isinstance(prompts, (list, tuple)) or not prompts:
             raise ValueError("prompts must be a non-empty list or tuple")
@@ -916,12 +918,11 @@ def sample(
             processed_input_images = []
             input_image = image_prompt
             if type(input_image) is str:
-                input_image = Image.open(input_image)
+                input_image = Image.open(input_image).convert("RGB")
 
-            input_image = input_image.resize((width, height))
-            input_image = np.array(input_image)
-            input_image = torch.tensor(input_image, dtype=torch.float32)
-            input_image = util.rescale(input_image, (0, 255), (-1, 1))
+            input_image = input_image.resize((width, height), resample=Image.LANCZOS)
+            input_image = np.array(input_image).astype(np.float32) / 255.0
+            input_image = 2.0 * torch.tensor(input_image) - 1
             processed_input_images.append(input_image)
             input_images_tensor = torch.stack(processed_input_images).to(device)
             input_images_tensor = util.move_channel(input_images_tensor, to="first")
@@ -972,6 +973,7 @@ def sample(
 
             latents = sampler.reverse_sample(output, timestep, latents)
 
+
         del unet
 
         decoder = models["decoder"]
@@ -980,22 +982,14 @@ def sample(
 
         del decoder
 
-        images = torch.clamp(
-                            (images + 1.0) / 2.0, min=0.0, max=1.0
-                        )
-        images = (
-            images.cpu().permute(0, 2, 3, 1).numpy()
-        )
+        images = torch.clamp((images + 1.0) / 2.0, min=0.0, max=1.0)
+        images = images.cpu().permute(0, 2, 3, 1).numpy()
 
-        images = torch.from_numpy(
-            images
-        ).permute(0, 3, 1, 2)
+        images = torch.from_numpy(images).permute(0, 3, 1, 2)
 
-        images = 255.0 * rearrange(
-            images, "b c h w -> b h w c"
-        )
+        images = 255.0 * rearrange(images.cpu().numpy(), "b c h w -> b h w c")
 
-        return images.to("cpu", torch.uint8).numpy()
+        return images.astype(np.uint8)
 
 
 if __name__ == "__main__":
@@ -1020,25 +1014,27 @@ if __name__ == "__main__":
     parser.add_argument("--sampler", type=str, default="ddim")
     parser.add_argument("--output-dir", type=str, default="samples")
 
-    args = parser.parse_args()
+    with torch.inference_mode():
 
-    models = preload_models(args.device)
-    images = sample(
-        models=models,
-        text_prompt=args.text_prompt,
-        image_prompt=args.image_prompt,
-        num_samples=args.num_samples,
-        width=args.width,
-        height=args.height,
-        seed=args.seed,
-        num_inference_steps=args.num_inference_steps,
-        cfg_scale=args.cfg_scale,
-        sampler=args.sampler,
-    )
+        args = parser.parse_args()
 
-    images = [Image.fromarray(image) for image in images]
+        models = preload_models(args.device)
+        images = sample(
+            models=models,
+            text_prompt=args.text_prompt,
+            image_prompt=args.image_prompt,
+            num_samples=args.num_samples,
+            width=args.width,
+            height=args.height,
+            seed=args.seed,
+            num_inference_steps=args.num_inference_steps,
+            cfg_scale=args.cfg_scale,
+            sampler=args.sampler,
+        )
 
-    output_path = Path(args.output_dir)
-    output_path.mkdir(parents=True, exist_ok=True)
-    for image in images:
-        image.save(f"{output_path}/{len(list(output_path.iterdir()))}.jpg")
+        images = [Image.fromarray(image) for image in images]
+
+        output_path = Path(args.output_dir)
+        output_path.mkdir(parents=True, exist_ok=True)
+        for image in images:
+            image.save(f"{output_path}/{len(list(output_path.iterdir()))}.png")

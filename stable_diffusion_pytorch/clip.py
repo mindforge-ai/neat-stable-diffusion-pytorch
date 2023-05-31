@@ -58,7 +58,7 @@ class CLIPTextEncoder(nn.Module):
         self.stack = nn.ModuleList(
             [
                 TransformerLayer(
-                    num_layers, embedding_len, scale_attention_scores=False
+                    num_layers, embedding_len, scale_attention_scores=True
                 )
                 for _ in range(num_layers)
             ]

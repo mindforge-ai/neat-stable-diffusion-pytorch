@@ -1,5 +1,11 @@
 import torch
-from stable_diffusion_pytorch import Tokenizer, CLIP, Encoder, Decoder, Diffusion
+from stable_diffusion_pytorch import (
+    Tokenizer,
+    CLIPTextEncoder,
+    Encoder,
+    Decoder,
+    Diffusion,
+)
 from stable_diffusion_pytorch import util
 from stable_diffusion_pytorch.samplers import (
     DDIMSampler,
@@ -15,6 +21,7 @@ from rich.progress import (
     TimeRemainingColumn,
     MofNCompleteColumn,
 )
+import PIL
 from PIL import Image
 from pathlib import Path
 import numpy as np
@@ -22,61 +29,15 @@ import torch.nn.functional as F
 import itertools
 from torchvision import transforms
 from torch.utils.tensorboard import SummaryWriter
+import os
 
 writer = SummaryWriter()
-
-
-def make_compatible(state_dict):
-    keys = list(state_dict.keys())
-    changed = False
-    for key in keys:
-        if "causal_attention_mask" in key:
-            del state_dict[key]
-            changed = True
-        elif "_proj_weight" in key:
-            new_key = key.replace("_proj_weight", "_proj.weight")
-            state_dict[new_key] = state_dict[key]
-            del state_dict[key]
-            changed = True
-        elif "_proj_bias" in key:
-            new_key = key.replace("_proj_bias", "_proj.bias")
-            state_dict[new_key] = state_dict[key]
-            del state_dict[key]
-            changed = True
-
-    if changed:
-        print(
-            "Given checkpoint data were modified dynamically by make_compatible"
-            " function on model_loader.py. Maybe this happened because you're"
-            " running newer codes with older checkpoint files. This behavior"
-            " (modify old checkpoints and notify rather than throw an error)"
-            " will be removed soon, so please download latest checkpoints file."
-        )
-
-    return state_dict
-
-
-def load_model(module, weights_path, device):
-    model = module().to(device)
-    state_dict = torch.load(weights_path)
-    state_dict = make_compatible(state_dict)
-    model.load_state_dict(state_dict)
-    return model
-
-
-def preload_models(device):
-    return {
-        "clip": load_model(CLIP, "data/ckpt/clip.pt", device),
-        "encoder": load_model(Encoder, "data/ckpt/encoder.pt", device),
-        "decoder": load_model(Decoder, "data/ckpt/decoder.pt", device),
-        "unet": load_model(Diffusion, "data/ckpt/unet.pt", device),
-    }
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--device", type=str, default="cuda")
-    parser.add_argument("--batch-size", type=int, default=2)
+    parser.add_argument("--batch-size", type=int, default=1)
     parser.add_argument("--num-epochs", type=int, default=1)
     parser.add_argument("--width", type=int, default=512)
     parser.add_argument("--height", type=int, default=512)
@@ -109,13 +70,11 @@ if __name__ == "__main__":
 
     tokenizer = Tokenizer()
 
-    text_encoder = CLIP().to(args.device)
+    text_encoder = CLIPTextEncoder().to(args.device)
     text_encoder.load_state_dict(torch.load("data/ckpt/clip.pt"))
-    text_encoder.requires_grad_(False)
 
     vae = Encoder().to(args.device)
     vae.load_state_dict(torch.load("data/ckpt/encoder.pt"))
-    vae.requires_grad_(False)
 
     decoder = Decoder().to(args.device)
     decoder.load_state_dict(torch.load("data/ckpt/decoder.pt"))
@@ -123,8 +82,48 @@ if __name__ == "__main__":
     unet = Diffusion().to(args.device)
     unet.load_state_dict(torch.load("data/ckpt/unet.pt"))
 
+    train_unet = True
+    train_vae = False
+    train_decoder = False
+    train_text_encoder = True
+
+    if train_unet:
+        unet.train()
+    else:
+        unet.requires_grad_(False)
+        unet.eval()
+
+    if train_vae:
+        vae.train()
+    else:
+        vae.requires_grad_(False)
+        vae.eval()
+
+    if train_decoder:
+        decoder.train()
+    else:
+        decoder.requires_grad_(False)
+        decoder.eval()
+
+    if train_text_encoder:
+        text_encoder.train()
+    else:
+        text_encoder.requires_grad_(False)
+        text_encoder.eval()
+
+    params_to_optimize = []
+
+    if train_unet:
+        params_to_optimize.append(unet.parameters())
+    if train_vae:
+        params_to_optimize.append(vae.parameters())
+    if train_decoder:
+        params_to_optimize.append(decoder.parameters())
+    if train_text_encoder:
+        params_to_optimize.append(text_encoder.parameters())
+
     optimizer = torch.optim.AdamW(
-        itertools.chain(unet.parameters(), vae.parameters(), text_encoder.parameters()),
+        itertools.chain(*params_to_optimize),
         lr=args.learning_rate,
         betas=(0.9, 0.999),
         weight_decay=1e-2,
@@ -135,25 +134,21 @@ if __name__ == "__main__":
 
     processed_input_images = []
     for input_image in list(Path(args.data_dir).iterdir()):
-        input_image = Image.open(input_image)
+        input_image = Image.open(input_image).convert("RGB")
+
         input_image = transforms.Compose(
             [
-                transforms.Resize((args.height, args.width)),
+                transforms.Resize(
+                    (args.height, args.width),
+                    interpolation=transforms.InterpolationMode.BILINEAR,
+                ),
+                transforms.CenterCrop((args.height, args.width)),
                 transforms.ToTensor(),
+                transforms.Normalize([0.5], [0.5]),
             ]
         )(input_image)
 
-        input_image = util.move_channel(input_image.unsqueeze(0), to="last").squeeze(
-            0
-        )  # fix this abomination
-
         processed_input_images.append(input_image)
-
-    writer.add_images(
-        "images/instances",
-        np.asarray([x.cpu().numpy() for x in processed_input_images]),
-        dataformats="NHWC",
-    )
 
     with progress:
         task = progress.add_task(
@@ -161,13 +156,14 @@ if __name__ == "__main__":
         )
         for epoch in range(args.num_epochs):
             # text_encoder.train()
+            vae.train()
             unet.train()
-            for step, batch in enumerate(
-                processed_input_images
-            ):  # iterate through Dataloader
+            for step, batch in enumerate(processed_input_images):
+                global_step = epoch * len(processed_input_images) + step
+
+                # iterate through Dataloader
                 # shift the below logic into the dataloader
                 input_images = torch.tensor(batch, device=args.device).unsqueeze(0)
-                input_images = util.move_channel(input_images, to="first")
 
                 batch_len, _, height, width = input_images.size()
                 noise_shape = (1, 4, height // 8, width // 8)
@@ -207,10 +203,14 @@ if __name__ == "__main__":
                 # At timestep 1000, it's pure noise. At timestep 0, it's the original latents. At timestep 500, it's half noise and half original latents.
                 # Internally, there is some variance (the betas schedule) in the amount of noise added. So the above line is not exactly true.
 
-                noisy_latents = noise_scheduler.forward_sample(latents, timesteps, noise=noise)
+                noisy_latents = noise_scheduler.forward_sample(
+                    latents, timesteps, noise=noise
+                ).to(
+                    torch.float32
+                )  # I don't know if this dtype conversion is correct.
 
                 # this data should come from dataloader
-                tokens = tokenizer.encode_batch(["zwx man"])
+                tokens = tokenizer.encode_batch(["a photo of zwx man"])
                 tokens = torch.tensor(tokens, device=args.device)
                 encoder_hidden_states = text_encoder(tokens)
 
@@ -236,26 +236,38 @@ if __name__ == "__main__":
                 optimizer.zero_grad()
 
                 # create global step from epoch and step
-                global_step = epoch * len(processed_input_images) + step
-                writer.add_scalar("loss/train", loss.detach().item(), global_step)
-
-                if global_step % args.sample_interval == 0:
-                    images = sample(
-                        models={
-                            "encoder": vae,
-                            "decoder": decoder,
-                            "unet": unet,
-                            "text_encoder": text_encoder,
-                        },
-                        text_prompt="zwx man",
-                        num_samples=2,
-                        show_progress=False,
-                    )
-                    writer.add_images(
-                        "images/samples", images, global_step, dataformats="NHWC"
-                    )
+                writer.add_scalar("loss/train", loss.detach().item(), global_step=global_step)
 
                 progress.update(task, advance=1)
+
+                with torch.inference_mode():
+                    if (global_step + 1) % args.sample_interval == 0:
+                        images= sample(
+                            models={
+                                "encoder": vae.eval(),
+                                "decoder": decoder.eval(),
+                                "unet": unet.eval(),
+                                "text_encoder": text_encoder.eval(),
+                            },
+                            text_prompt="a painting of zwx man",
+                            num_samples=1,
+                            show_progress=False,
+                        )
+                        torch.save(vae.state_dict(), f"weights/{global_step}-vae.pt")
+                        torch.save(unet.state_dict(), f"weights/{global_step}-unet.pt")
+                        torch.save(decoder.state_dict(), f"weights/{global_step}-decoder.pt")
+                        torch.save(text_encoder.state_dict(), f"weights/{global_step}-text-encoder.pt")
+                        writer.add_images(
+                            "images/samples", images, global_step, dataformats="NHWC"
+                        )
+                        for index, image in enumerate(images):
+                            image = transforms.ToPILImage()(image)
+                            image.save(
+                                os.path.join(
+                                    f"training-samples/sample_{global_step}_{index}.png"
+                                )
+                            )
+
 
     writer.flush()
     writer.close()
