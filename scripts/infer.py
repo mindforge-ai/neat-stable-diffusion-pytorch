@@ -796,7 +796,7 @@ def make_compatible(state_dict):
 def load_model(module, weights_path, device):
     model = module().to(device)
     state_dict = torch.load(weights_path)
-    # state_dict = make_compatible(state_dict)
+    state_dict = make_compatible(state_dict)
     model.load_state_dict(state_dict)
     # torch.save(model.state_dict(), weights_path)
     return model
@@ -804,10 +804,10 @@ def load_model(module, weights_path, device):
 
 def preload_models(device):
     return {
-        "text_encoder": load_model(CLIPTextEncoder, "data/ckpt/clip.pt", device),
-        "encoder": load_model(Encoder, "data/ckpt/encoder.pt", device),
-        "decoder": load_model(Decoder, "data/ckpt/decoder.pt", device),
-        "unet": load_model(Diffusion, "data/ckpt/unet.pt", device),
+        "text_encoder": load_model(CLIPTextEncoder, "data/clip.pt", device),
+        "encoder": load_model(Encoder, "data/encoder.pt", device),
+        "decoder": load_model(Decoder, "data/decoder.pt", device),
+        "unet": load_model(Diffusion, "data/unet.pt", device),
     }
 
 
@@ -973,7 +973,7 @@ def sample(
 
             latents = sampler.reverse_sample(output, timestep, latents)
 
-
+            
         del unet
 
         decoder = models["decoder"]

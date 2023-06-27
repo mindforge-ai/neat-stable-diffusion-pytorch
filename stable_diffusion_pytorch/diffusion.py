@@ -42,7 +42,7 @@ class ResidualBlock(nn.Module):
             )
 
     def forward(self, feature, time):
-
+      
         residue = feature
 
         feature = self.groupnorm_feature(feature)
