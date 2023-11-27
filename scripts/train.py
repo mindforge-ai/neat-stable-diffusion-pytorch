@@ -243,6 +243,9 @@ if __name__ == "__main__":
                 writer.add_scalar(
                     "loss/train", loss.detach().item(), global_step=global_step
                 )
+                writer.add_scalar(
+                    "lr/train", optimizer.param_groups[0]["lr"], global_step=global_step
+                )
 
                 progress.update(task, advance=1)
 
@@ -271,11 +274,11 @@ if __name__ == "__main__":
                         writer.add_images(
                             "images/samples", images, global_step, dataformats="NHWC"
                         )
-                        for index, image in enumerate(images):
+                        """ for index, image in enumerate(images):
                             image = transforms.ToPILImage()(image)
                             image.save(
                                 f"./training-samples/sample_{global_step}_{index}.png"
-                            )
+                            ) """
 
     writer.flush()
     writer.close()
