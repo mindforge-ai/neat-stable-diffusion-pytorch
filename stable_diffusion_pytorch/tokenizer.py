@@ -4,7 +4,6 @@ import itertools
 import json
 from typing import List, Tuple
 import regex as re
-from . import util
 
 
 def create_bytes_table() -> dict:
@@ -30,11 +29,13 @@ def pairwise(seq):
 class Tokenizer:
     def __init__(
         self,
+        vocab_path: str,
+        merges_path: str,
     ):
-        with open(util.get_file_path("vocab.json"), encoding="utf-8") as f:
+        with open(vocab_path, encoding="utf-8") as f:
             self.vocab = json.load(f)
 
-        with open(util.get_file_path("merges.txt"), encoding="utf-8") as f:
+        with open(merges_path, encoding="utf-8") as f:
             lines = f.read().split("\n")
             lines = lines[1:-1]
             self.merges = {tuple(bigram.split()): i for i, bigram in enumerate(lines)}

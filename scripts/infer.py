@@ -745,6 +745,8 @@ from einops import rearrange
 torch.set_printoptions(precision=20)
 np.set_printoptions(precision=20)
 
+WEIGHTS_ROOT = "../weights/sd15"
+
 
 def make_compatible(state_dict):
     keys = list(state_dict.keys())
@@ -804,10 +806,10 @@ def load_model(module, weights_path, device):
 
 def preload_models(device):
     return {
-        "text_encoder": load_model(CLIPTextEncoder, "data/clip.pt", device),
-        "encoder": load_model(Encoder, "data/encoder.pt", device),
-        "decoder": load_model(Decoder, "data/decoder.pt", device),
-        "unet": load_model(Diffusion, "data/unet.pt", device),
+        "text_encoder": load_model(CLIPTextEncoder, f"{WEIGHTS_ROOT}/clip.pt", device),
+        "encoder": load_model(Encoder, f"{WEIGHTS_ROOT}/encoder.pt", device),
+        "decoder": load_model(Decoder, f"{WEIGHTS_ROOT}/decoder.pt", device),
+        "unet": load_model(Diffusion, f"{WEIGHTS_ROOT}/unet.pt", device),
     }
 
 
@@ -856,7 +858,6 @@ def sample(
         use_cfg = True
 
     with progress if show_progress else nullcontext():
-
         if not isinstance(prompts, (list, tuple)) or not prompts:
             raise ValueError("prompts must be a non-empty list or tuple")
 
@@ -887,7 +888,10 @@ def sample(
         random.seed(seed)
         generator = torch.Generator(device=device).manual_seed(seed)
 
-        tokenizer = Tokenizer()
+        tokenizer = Tokenizer(
+            vocab_path="../weights/sd15/vocab.json",
+            merges_path="../weights/sd15/merges.txt",
+        )
 
         text_encoder = models["text_encoder"]
         if use_cfg:
@@ -951,7 +955,6 @@ def sample(
             else sampler.timesteps
         )
         for timestep in timesteps:
-
             time_embedding = util.get_time_embedding(
                 timestep, dtype=torch.float32, device=latents.device
             )  # corresponds to t_emb
@@ -973,7 +976,6 @@ def sample(
 
             latents = sampler.reverse_sample(output, timestep, latents)
 
-            
         del unet
 
         decoder = models["decoder"]
@@ -1015,7 +1017,6 @@ if __name__ == "__main__":
     parser.add_argument("--output-dir", type=str, default="samples")
 
     with torch.inference_mode():
-
         args = parser.parse_args()
 
         models = preload_models(args.device)

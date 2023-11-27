@@ -31,6 +31,7 @@ from torchvision import transforms
 from torch.utils.tensorboard import SummaryWriter
 import os
 
+WEIGHTS_PATH = "../weights/sd15"
 writer = SummaryWriter()
 
 
@@ -68,19 +69,22 @@ if __name__ == "__main__":
     generator = torch.Generator(device=args.device)
     generator.manual_seed(args.seed)
 
-    tokenizer = Tokenizer()
+    tokenizer = Tokenizer(
+        vocab_path=f"{WEIGHTS_PATH}/vocab.json",
+        merges_path=f"{WEIGHTS_PATH}/merges.txt",
+    )
 
     text_encoder = CLIPTextEncoder().to(args.device)
-    text_encoder.load_state_dict(torch.load("data/ckpt/clip.pt"))
+    text_encoder.load_state_dict(torch.load(f"{WEIGHTS_PATH}/clip.pt"))
 
     vae = Encoder().to(args.device)
-    vae.load_state_dict(torch.load("data/ckpt/encoder.pt"))
+    vae.load_state_dict(torch.load(f"{WEIGHTS_PATH}/encoder.pt"))
 
     decoder = Decoder().to(args.device)
-    decoder.load_state_dict(torch.load("data/ckpt/decoder.pt"))
+    decoder.load_state_dict(torch.load(f"{WEIGHTS_PATH}/decoder.pt"))
 
     unet = Diffusion().to(args.device)
-    unet.load_state_dict(torch.load("data/ckpt/unet.pt"))
+    unet.load_state_dict(torch.load(f"{WEIGHTS_PATH}/unet.pt"))
 
     train_unet = True
     train_vae = False
@@ -236,13 +240,15 @@ if __name__ == "__main__":
                 optimizer.zero_grad()
 
                 # create global step from epoch and step
-                writer.add_scalar("loss/train", loss.detach().item(), global_step=global_step)
+                writer.add_scalar(
+                    "loss/train", loss.detach().item(), global_step=global_step
+                )
 
                 progress.update(task, advance=1)
 
                 with torch.inference_mode():
                     if (global_step + 1) % args.sample_interval == 0:
-                        images= sample(
+                        images = sample(
                             models={
                                 "encoder": vae.eval(),
                                 "decoder": decoder.eval(),
@@ -253,21 +259,23 @@ if __name__ == "__main__":
                             num_samples=1,
                             show_progress=False,
                         )
-                        torch.save(vae.state_dict(), f"weights/{global_step}-vae.pt")
+                        """ torch.save(vae.state_dict(), f"weights/{global_step}-vae.pt")
                         torch.save(unet.state_dict(), f"weights/{global_step}-unet.pt")
-                        torch.save(decoder.state_dict(), f"weights/{global_step}-decoder.pt")
-                        torch.save(text_encoder.state_dict(), f"weights/{global_step}-text-encoder.pt")
+                        torch.save(
+                            decoder.state_dict(), f"weights/{global_step}-decoder.pt"
+                        )
+                        torch.save(
+                            text_encoder.state_dict(),
+                            f"weights/{global_step}-text-encoder.pt",
+                        ) """
                         writer.add_images(
                             "images/samples", images, global_step, dataformats="NHWC"
                         )
                         for index, image in enumerate(images):
                             image = transforms.ToPILImage()(image)
                             image.save(
-                                os.path.join(
-                                    f"training-samples/sample_{global_step}_{index}.png"
-                                )
+                                f"./training-samples/sample_{global_step}_{index}.png"
                             )
-
 
     writer.flush()
     writer.close()

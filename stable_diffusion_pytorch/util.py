@@ -38,13 +38,6 @@ def get_alphas_cumprod(beta_start=0.00085, beta_end=0.012, num_steps=1000):
     return alphas_cumprod
 
 
-def get_file_path(filename, url=None):
-    module_location = os.path.dirname(os.path.abspath(__file__))
-    parent_location = os.path.dirname(module_location)
-    file_location = os.path.join(parent_location, "data", filename)
-    return file_location
-
-
 def move_channel(image, to):
     if to == "first":
         return image.permute(0, 3, 1, 2)  # (N, H, W, C) -> (N, C, H, W)
